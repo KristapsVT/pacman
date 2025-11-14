@@ -16,6 +16,19 @@ except Exception:
 # Allow the viz runtime a short moment to initialize
 time.sleep(0.05)
 
+# Attempt to load the Pac-Man animation module and run its animation
+try:
+    from PacMan import run_pacman_animation
+    try:
+        pm_node = run_pacman_animation()
+        print('[ExE] PacMan animation started, node:', pm_node)
+    except Exception:
+        print('[ExE] PacMan animation failed to start:')
+        traceback.print_exc()
+except Exception:
+    print('[ExE] PacMan module not available or failed to import:')
+    traceback.print_exc()
+
 # Load map and keys (if available)
 pacmap_root = None
 try:

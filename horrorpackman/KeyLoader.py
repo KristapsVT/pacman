@@ -106,7 +106,13 @@ def _compute_group_bounds(group):
     try:
         bb = group.getBoundingBox()
         if bb:
-            minX, minY, minZ, maxX, maxY, maxZ = bb
+            raw_minX, raw_minY, raw_minZ, raw_maxX, raw_maxY, raw_maxZ = bb
+            # normalize in case Vizard returned swapped values
+            minX = min(raw_minX, raw_maxX)
+            maxX = max(raw_minX, raw_maxX)
+            minZ = min(raw_minZ, raw_maxZ)
+            maxZ = max(raw_minZ, raw_maxZ)
+            print('[KeyLoader] Raw group BB:', bb, 'Normalized:', (minX, minZ, maxX, maxZ))
             return minX, minZ, maxX, maxZ
     except Exception:
         pass
@@ -153,7 +159,11 @@ def _safe_load_key(path, parent=None, scale=1.0):
     if viz is None:
         print('[KeyLoader] viz not available; cannot create keys at runtime in this environment')
         return None
-    full = os.path.join(os.path.dirname(__file__), '..', path)
+    # Resolve asset path relative to this module. Accept absolute paths too.
+    if os.path.isabs(path):
+        full = path
+    else:
+        full = os.path.normpath(os.path.join(os.path.dirname(__file__), path))
     try:
         if os.path.exists(full):
             node = viz.addChild(full)
@@ -166,7 +176,10 @@ def _safe_load_key(path, parent=None, scale=1.0):
             print('[KeyLoader] Loaded key asset:', full)
             return node
         else:
+            # Common cause: assets directory location. Print helpful hint.
+            assets_dir = os.path.normpath(os.path.join(os.path.dirname(__file__), 'assets'))
             print('[KeyLoader] Key asset missing:', full)
+            print('[KeyLoader] Looking for key under module assets dir:', assets_dir)
     except Exception as e:
         print('[KeyLoader] Error loading key', full, e)
     # fallback placeholder
@@ -180,12 +193,13 @@ def _safe_load_key(path, parent=None, scale=1.0):
     return None
 
 
-def spawn_keys_on_map(parent=None, grid_path=GRID_FILE, assets=KEY_ASSETS, map_root=None, cell_size=CELL_SIZE, avoid_symbols=None, attach_to_map=False):
+def spawn_keys_on_map(parent=None, grid_path=GRID_FILE, assets=KEY_ASSETS, map_root=None, cell_size=CELL_SIZE, avoid_symbols=None, attach_to_map=False, height_override=None, height_offset=1.0, visualize=False):
     """Spawn one of each key on distinct random 🟪 cells read from `grid_path`.
 
     - parent: optional Vizard group to attach keys to.
     - grid_path: path to Map_Grid.txt.
     - assets: list of 3 asset relative paths (red, yellow, white).
+    - height_offset: float added to the computed spawn Y (useful to lift keys above floor). Default 1.0
 
     Returns list of spawned nodes (or None for missing creations) in same order as assets.
     """
@@ -231,7 +245,11 @@ def spawn_keys_on_map(parent=None, grid_path=GRID_FILE, assets=KEY_ASSETS, map_r
 
     spawned = []
     for asset, (r, c) in zip(assets, chosen):
-        x, y, z = _grid_to_world(r, c, rows, cols, cell_size=used_cell, left=left, top=top)
+        x, wy, z = _grid_to_world(r, c, rows, cols, cell_size=used_cell, left=left, top=top)
+        # allow overriding the spawn height for testing (e.g., float 15 to place keys high in the air)
+        base_y = height_override if height_override is not None else wy
+        # apply explicit offset so keys don't end up half-buried in geometry
+        y = base_y + (height_offset or 0.0)
         # By default spawn keys as top-level children at world coords to avoid
         # parent-relative transforms or collision/overlap issues. If attach_to_map
         # is True we'll parent them to the provided `parent` (map group).
@@ -242,8 +260,22 @@ def spawn_keys_on_map(parent=None, grid_path=GRID_FILE, assets=KEY_ASSETS, map_r
                 node.setPosition([x, y, z])
             except Exception:
                 pass
+            # read back actual position to detect if setPosition was applied
+            try:
+                actual_pos = node.getPosition()
+            except Exception:
+                actual_pos = None
+            print('[KeyLoader] Placed key', asset, 'requested_world=', (x, y, z), 'actual_world=', actual_pos, 'parented=', bool(load_parent))
+            # optionally visualize the intended cell center so we can debug alignment
+            if visualize and vizshape is not None:
+                try:
+                    marker = vizshape.addSphere(radius=0.08)
+                    marker.color(1.0, 0.0, 1.0)
+                    marker.setPosition([x, y, z])
+                    marker.disable(viz.LIGHTING)
+                except Exception:
+                    pass
         spawned.append(node)
-        print('[KeyLoader] Placed key', asset, 'grid=', (r, c), 'world=', (x, y, z), 'parented=', bool(load_parent))
     print('[KeyLoader] Spawned keys at', chosen)
     return spawned
 

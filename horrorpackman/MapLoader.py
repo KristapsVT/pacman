@@ -55,15 +55,15 @@ def _style_pacmap(floor, walls):
 			pass
 	try:
 		if floor:
-			floor.color(1.0, 0.1, 0.1)  # red floor
+			floor.color(1.0, 0.1, 0.1)
 	except Exception:
 		pass
 	for i, n in enumerate(walls):
 		try:
 			if i % 2 == 0:
-				n.color(0.00, 0.80, 1.00)  # neon cyan
+				n.color(0.00, 0.80, 1.00)
 			else:
-				n.color(0.02, 0.02, 0.02)  # near-black
+				n.color(0.02, 0.02, 0.02)
 		except Exception:
 			pass
 
