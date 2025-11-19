@@ -171,6 +171,36 @@ def toggle_perspective():
     player.visible(False if FIRST_PERSON else True)
 vizact.onkeydown('f', toggle_perspective)
 
+# Use KeyLoader's helper to point to the nearest key (keeps logic centralized)
+try:
+    from KeyLoader import point_to_closest_key as _kl_point_to_closest_key
+except Exception:
+    _kl_point_to_closest_key = None
+
+def point_to_closest_key_handler():
+    if _kl_point_to_closest_key is None:
+        print('[Key] KeyLoader not available')
+        return
+    res = _kl_point_to_closest_key(player=player)
+    if not res:
+        print('[Key] No keys spawned or no valid key positions')
+        return
+    yaw_target = res.get('yaw', 0.0)
+    dist = res.get('distance', None)
+    global cam_yaw, player_yaw
+    cam_yaw = yaw_target
+    player_yaw = yaw_target
+    try:
+        player.setEuler([player_yaw, 0, 0])
+    except Exception:
+        pass
+    if dist is not None:
+        print('[Key] Pointing to nearest key at', round(dist, 2), 'units')
+    else:
+        print('[Key] Pointing to nearest key')
+
+vizact.onkeydown('k', lambda: point_to_closest_key_handler())
+
 # -----------------------------
 # Camera state + mouse callback (unified FP-like control for both FP & TP)
 # -----------------------------
