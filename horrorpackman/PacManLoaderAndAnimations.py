@@ -118,6 +118,41 @@ def run_pacman_animation(asset_relative='assets/PacMan.glb', base_scale=PACMAN_S
         'base_z': pz
     }
 
+    # Expose dynamic jump params for external steering (AI can update before each jump)
+    try:
+        root._anim_params = {
+            'jump_forward': jump_forward,
+            'forward_dir': forward_dir,
+            'jump_vel': jump_vel,
+            'gravity': gravity
+        }
+    except Exception:
+        pass
+
+    # Optional: setter helper
+    def _set_jump_params(new_forward_dir=None, new_jump_forward=None, new_jump_vel=None, new_gravity=None):
+        params = getattr(root, '_anim_params', None)
+        if params is None:
+            return
+        if new_forward_dir is not None:
+            params['forward_dir'] = new_forward_dir
+        if new_jump_forward is not None:
+            params['jump_forward'] = new_jump_forward
+        if new_jump_vel is not None:
+            params['jump_vel'] = new_jump_vel
+        if new_gravity is not None:
+            params['gravity'] = new_gravity
+    try:
+        root.set_jump_params = _set_jump_params
+    except Exception:
+        pass
+
+    # Expose internal state (read-only usage recommended)
+    try:
+        root._pm_state = state
+    except Exception:
+        pass
+
     import math
 
     def _update():
@@ -153,16 +188,27 @@ def run_pacman_animation(asset_relative='assets/PacMan.glb', base_scale=PACMAN_S
                 if state.get('passed_peak', False) and abs(phase) < 0.05:
                     # trigger jump
                     state['mode'] = 'jump'
-                    state['vy'] = jump_vel
+                    # Pull latest params at jump start
+                    params = getattr(root, '_anim_params', None)
+                    jf = jump_forward
+                    jv = jump_vel
+                    gr = gravity
+                    fd = forward_dir
+                    if isinstance(params, dict):
+                        jf = params.get('jump_forward', jf)
+                        jv = params.get('jump_vel', jv)
+                        gr = params.get('gravity', gr)
+                        fd = params.get('forward_dir', fd)
+                    state['vy'] = jv
                     # compute forward movement during the jump: total flight time ~= 2*vy/g
-                    time_to_land = (2.0 * jump_vel / gravity) if gravity != 0 else 0.0
-                    if time_to_land > 1e-6 and jump_forward:
-                        state['forward_speed'] = float(jump_forward) / float(time_to_land)
+                    time_to_land = (2.0 * jv / gr) if gr != 0 else 0.0
+                    if time_to_land > 1e-6 and jf:
+                        state['forward_speed'] = float(jf) / float(time_to_land)
                     else:
                         state['forward_speed'] = 0.0
                     # normalize forward_dir
                     try:
-                        fx, fy, fz = forward_dir
+                        fx, fy, fz = fd
                         mag = math.hypot(math.hypot(fx, fy), fz)
                         if mag > 1e-6:
                             state['forward_dir'] = (fx/mag, fy/mag, fz/mag)

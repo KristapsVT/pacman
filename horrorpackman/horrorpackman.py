@@ -10,6 +10,8 @@ import vizshape
 import math
 import os
 import random
+from MapLoader import build_and_attach_map
+from PacManAI import PacManChaser
 
 # -----------------------------
 # Config
@@ -137,6 +139,12 @@ player = load_model(ASSET_PLAYER_GLTF, PLAYER_MODEL_SCALE)
 player.setPosition([0,PLAYER_Y_OFFSET,0])
 player_yaw = 0.0
 player.visible(False if FIRST_PERSON else True)
+
+# -----------------------------
+# Map + Pac-Man chaser
+# -----------------------------
+pacmap_root = build_and_attach_map()
+pacman_ai = PacManChaser(map_root=pacmap_root)
 
 # -----------------------------
 # Input
@@ -279,6 +287,16 @@ def on_update():
         elif moved:
             player_yaw = math.degrees(math.atan2(vx,vz))
             player.setEuler([player_yaw,0,0])
+
+    # Update Pac-Man chaser AI
+    try:
+        px, py, pz = player.getPosition()
+        pacman_ai.update(dt, (px, py, pz))
+        # Simple collision with player (print/log only)
+        if pacman_ai.collides_with_point((px, py, pz), radius=PLAYER_RADIUS):
+            print('[PacMan] Collision: player caught!')
+    except Exception as e:
+        pass
 
 vizact.ontimer(0,on_update)
 
