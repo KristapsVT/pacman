@@ -106,6 +106,40 @@ def load_pacmap(parent=None, apply_style=True):
 	if apply_style:
 		_style_pacmap(floor_node, wall_nodes)
 
+	# Compute and cache approximate world-space bounding rectangle for the pacmap
+	# so other modules (e.g. KeyLoader) can align content to the pacmap center.
+	minX = float('inf'); minZ = float('inf'); maxX = float('-inf'); maxZ = float('-inf')
+	any_geom = False
+	for n in ([floor_node] + wall_nodes):
+		if not n:
+			continue
+		try:
+			bb = n.getBoundingBox()
+			if bb:
+				raw_minX, raw_minY, raw_minZ, raw_maxX, raw_maxY, raw_maxZ = bb
+				# normalize in case the bounding box returned swapped values
+				cminX = min(raw_minX, raw_maxX)
+				cmaxX = max(raw_minX, raw_maxX)
+				cminZ = min(raw_minZ, raw_maxZ)
+				cmaxZ = max(raw_minZ, raw_maxZ)
+				minX = min(minX, cminX); minZ = min(minZ, cminZ)
+				maxX = max(maxX, cmaxX); maxZ = max(maxZ, cmaxZ)
+				any_geom = True
+				continue
+		except Exception:
+			pass
+		try:
+			px, py, pz = n.getPosition()
+			minX = min(minX, px); minZ = min(minZ, pz)
+			maxX = max(maxX, px); maxZ = max(maxZ, pz)
+			any_geom = True
+		except Exception:
+			pass
+	if any_geom:
+		group._pacmap_bounds = (minX, minZ, maxX, maxZ)
+		group._pacmap_center = ((minX + maxX) / 2.0, (minZ + maxZ) / 2.0)
+		print('[Map] Cached pacmap bounds:', group._pacmap_bounds, 'center=', group._pacmap_center)
+
 	return group, floor_node, wall_nodes
 
 # Optional quick build helper used by main script (import and call early):

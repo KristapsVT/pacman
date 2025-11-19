@@ -18,7 +18,7 @@ time.sleep(0.05)
 
 # Attempt to load the Pac-Man animation module and run its animation
 try:
-    from PacMan import run_pacman_animation
+    from PacManLoaderAndAnimations import run_pacman_animation
     try:
         pm_node = run_pacman_animation()
         print('[ExE] PacMan animation started, node:', pm_node)

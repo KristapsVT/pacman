@@ -193,7 +193,43 @@ def _safe_load_key(path, parent=None, scale=1.0):
     return None
 
 
-def spawn_keys_on_map(parent=None, grid_path=GRID_FILE, assets=KEY_ASSETS, map_root=None, cell_size=CELL_SIZE, avoid_symbols=None, attach_to_map=False, height_override=None, height_offset=1.0, visualize=False):
+def _style_key(node, color=None):
+    """Apply simple visual styling to a key node: disable lighting and set color.
+
+    This attempts to apply lighting disable and color to the node and its children
+    when available. Errors are ignored to keep Vizard-optional imports safe.
+    """
+    if node is None or viz is None:
+        return
+    # Try to disable lighting on the node itself
+    try:
+        node.disable(viz.LIGHTING)
+    except Exception:
+        pass
+    # Try to set node color
+    if color is not None:
+        try:
+            node.color(*color)
+        except Exception:
+            pass
+    # Try to apply to children (GLB imports often have child geometries)
+    try:
+        children = node.getChildren()
+    except Exception:
+        children = []
+    for ch in children:
+        try:
+            ch.disable(viz.LIGHTING)
+        except Exception:
+            pass
+        if color is not None:
+            try:
+                ch.color(*color)
+            except Exception:
+                pass
+
+
+def spawn_keys_on_map(parent=None, grid_path=GRID_FILE, assets=KEY_ASSETS, map_root=None, cell_size=CELL_SIZE, avoid_symbols=None, attach_to_map=False, height_override=None, height_offset=1.0, visualize=False, debug_corners=False, fit_mode='contain'):
     """Spawn one of each key on distinct random 🟪 cells read from `grid_path`.
 
     - parent: optional Vizard group to attach keys to.
@@ -220,7 +256,42 @@ def spawn_keys_on_map(parent=None, grid_path=GRID_FILE, assets=KEY_ASSETS, map_r
     if len(candidates) < len(assets):
         print('[KeyLoader] Warning: fewer candidate cells than keys; will reuse cells')
 
-    chosen = random.sample(candidates, min(len(candidates), len(assets)))
+    # Debug mode: place keys near the map corners so we can visually inspect alignment
+    if debug_corners:
+        def _nearest_path(grid, tr, tc, max_radius=10):
+            rows = len(grid); cols = max(len(r) for r in grid)
+            if 0 <= tr < rows and 0 <= tc < len(grid[tr]) and grid[tr][tc] == '🟪':
+                return (tr, tc)
+            for r in range(1, max_radius+1):
+                for dr in range(-r, r+1):
+                    for dc in (-r, r):
+                        rr = tr + dr; cc = tc + dc
+                        if 0 <= rr < rows and 0 <= cc < len(grid[rr]):
+                            if grid[rr][cc] == '🟪':
+                                return (rr, cc)
+                for dc in range(-r+1, r):
+                    for dr in (-r, r):
+                        rr = tr + dr; cc = tc + dc
+                        if 0 <= rr < rows and 0 <= cc < len(grid[rr]):
+                            if grid[rr][cc] == '🟪':
+                                return (rr, cc)
+            return None
+
+        rows = len(grid); cols = max(len(r) for r in grid)
+        corner_targets = [(0,0), (0, cols-1), (rows-1, 0), (rows-1, cols-1)]
+        chosen = []
+        for tr, tc in corner_targets:
+            found = _nearest_path(grid, tr, tc, max_radius=max(rows, cols))
+            if found:
+                chosen.append(found)
+            else:
+                # if no path near corner, still include the raw corner cell
+                chosen.append((max(0, min(tr, rows-1)), max(0, min(tc, cols-1))))
+        # trim or cycle to match number of assets
+        chosen = chosen[:len(assets)]
+        print('[KeyLoader][DebugCorners] Chosen corner cells:', chosen)
+    else:
+        chosen = random.sample(candidates, min(len(candidates), len(assets)))
     # if fewer candidates than assets, allow repeats but ensure one each by cycling
     while len(chosen) < len(assets):
         chosen.append(random.choice(candidates))
@@ -229,19 +300,59 @@ def spawn_keys_on_map(parent=None, grid_path=GRID_FILE, assets=KEY_ASSETS, map_r
     # to the group's bounding rectangle so keys land on the visible map.
     left = None; top = None; used_cell = cell_size
     if map_root is not None and viz is not None:
-        bounds = _compute_group_bounds(map_root)
+        # Prefer cached bounds/center placed by MapLoader when available
+        bounds = None
+        try:
+            if hasattr(map_root, '_pacmap_bounds') and hasattr(map_root, '_pacmap_center'):
+                minX, minZ, maxX, maxZ = map_root._pacmap_bounds
+                bounds = (minX, minZ, maxX, maxZ)
+            else:
+                bounds = _compute_group_bounds(map_root)
+        except Exception:
+            bounds = _compute_group_bounds(map_root)
         if bounds is not None:
             minX, minZ, maxX, maxZ = bounds
             width = maxX - minX
             height = maxZ - minZ
-            # compute cell size from geometry (average X/Z cell sizes)
+            # compute cell size from geometry and center the grid inside the map bounds
             if cols > 0 and rows > 0:
                 cell_x = width / float(cols)
                 cell_z = height / float(rows)
-                used_cell = (cell_x + cell_z) / 2.0 if cell_x > 0 and cell_z > 0 else cell_size
-                left = minX
-                top = maxZ
-                print('[KeyLoader] Aligned grid to map bounds:', (minX, minZ, maxX, maxZ), 'cell=', used_cell)
+                # choose a cell size according to requested fit_mode:
+                # - 'contain' (default): min(cell_x, cell_z) so grid fully fits inside bounds
+                # - 'cover': max(cell_x, cell_z) so grid covers bounds (may overflow one axis)
+                # - 'width': match map width (use cell_x)
+                # - 'height': match map height (use cell_z)
+                try:
+                    if fit_mode == 'cover':
+                        used_cell = max(cell_x, cell_z)
+                    elif fit_mode == 'width':
+                        used_cell = cell_x
+                    elif fit_mode == 'height':
+                        used_cell = cell_z
+                    else:
+                        used_cell = min(cell_x, cell_z)
+                except Exception:
+                    used_cell = cell_size
+                # compute grid world size and offsets so the grid is centered on the
+                # pacmap group's center (not just top-left alignment). If MapLoader
+                # provided a cached center use that directly to avoid bbox interpretation
+                grid_world_width = used_cell * cols
+                grid_world_height = used_cell * rows
+                try:
+                    if hasattr(map_root, '_pacmap_center'):
+                        center_x, center_z = map_root._pacmap_center
+                    else:
+                        center_x = (minX + maxX) / 2.0
+                        center_z = (minZ + maxZ) / 2.0
+                except Exception:
+                    center_x = (minX + maxX) / 2.0
+                    center_z = (minZ + maxZ) / 2.0
+                # left is the world X coordinate of the grid's left edge
+                left = center_x - (grid_world_width / 2.0)
+                # top is the world Z coordinate of the grid's top edge
+                top = center_z + (grid_world_height / 2.0)
+                print('[KeyLoader] Centered grid inside map bounds:', (minX, minZ, maxX, maxZ), 'cell=', used_cell, 'grid_size=', (grid_world_width, grid_world_height), 'center=', (center_x, center_z))
 
     spawned = []
     for asset, (r, c) in zip(assets, chosen):
@@ -266,6 +377,25 @@ def spawn_keys_on_map(parent=None, grid_path=GRID_FILE, assets=KEY_ASSETS, map_r
             except Exception:
                 actual_pos = None
             print('[KeyLoader] Placed key', asset, 'requested_world=', (x, y, z), 'actual_world=', actual_pos, 'parented=', bool(load_parent))
+            # style the key: disable lighting and color based on asset name
+            try:
+                basename = os.path.basename(asset).lower()
+            except Exception:
+                basename = ''
+            color = None
+            try:
+                if 'red' in basename:
+                    color = (1.0, 0.0, 0.0)
+                elif 'yellow' in basename:
+                    color = (1.0, 1.0, 0.0)
+                elif 'white' in basename:
+                    color = (1.0, 1.0, 1.0)
+            except Exception:
+                color = None
+            try:
+                _style_key(node, color=color)
+            except Exception:
+                pass
             # optionally visualize the intended cell center so we can debug alignment
             if visualize and vizshape is not None:
                 try:
