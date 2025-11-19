@@ -14,8 +14,7 @@ import random
 # -----------------------------
 # Config
 # -----------------------------
-ARENA_SIZE          = 200.0
-PLAYER_SPEED        = 4.0
+PLAYER_SPEED        = 12.0
 PLAYER_RADIUS       = 0.22
 PLAYER_MODEL_SCALE  = 0.35
 PLAYER_Y_OFFSET     = 0.35
@@ -47,14 +46,6 @@ STRAFE_FACE_OFFSET  = 90.0
 # -----------------------------
 def clamp(v,a,b): return max(a,min(v,b))
 def lerp(a,b,t): return a + (b-a)*t
-
-def within_arena(node, radius=PLAYER_RADIUS):
-    # Note: clamping kept; remove if you want completely free player movement
-    x,y,z = node.getPosition()
-    half = ARENA_SIZE*0.5 - radius
-    x = clamp(x,-half,half)
-    z = clamp(z,-half,half)
-    node.setPosition([x,y,z])
 
 def _get_sphere_center(raw):
     try:
@@ -139,18 +130,6 @@ def apply_mouse_lock():
         viz.mouse.setVisible(True)
 apply_mouse_lock()
 
-# Lighting & arena
-light = viz.addLight(); light.position(0,8,0); light.color(1,1,1); light.enable()
-try:
-    viz.addAmbientLight(color=[0.35,0.35,0.38])
-except:
-    pass
-
-floor = vizshape.addPlane(size=[ARENA_SIZE,ARENA_SIZE], axis=vizshape.AXIS_Y)
-floor.color(0.30,0.31,0.32)
-
-# Note: arena border boxes removed per earlier request
-
 # -----------------------------
 # Player
 # -----------------------------
@@ -158,12 +137,6 @@ player = load_model(ASSET_PLAYER_GLTF, PLAYER_MODEL_SCALE)
 player.setPosition([0,PLAYER_Y_OFFSET,0])
 player_yaw = 0.0
 player.visible(False if FIRST_PERSON else True)
-
-# -----------------------------
-# Pac-Man removed
-# -----------------------------
-# All Pac-Man model, animation and update code has been removed from this file.
-# If you want to restore Pac-Man later, re-add the loading, state and update logic.
 
 # -----------------------------
 # Input
@@ -306,9 +279,6 @@ def on_update():
         elif moved:
             player_yaw = math.degrees(math.atan2(vx,vz))
             player.setEuler([player_yaw,0,0])
-
-    # Player staying within arena bounds (clamp)
-    within_arena(player, PLAYER_RADIUS)
 
 vizact.ontimer(0,on_update)
 

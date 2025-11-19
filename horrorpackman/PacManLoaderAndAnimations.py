@@ -247,3 +247,5 @@ if __name__ == '__main__':
         print('[PacMan] Finished (no Vizard).')
     else:
         print('[PacMan] Press ESC in the Vizard window to quit.')
+
+#Hello world
