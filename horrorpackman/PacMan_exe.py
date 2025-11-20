@@ -41,6 +41,17 @@ except Exception:
     print('[ExE] KeyLoader not available or failed:')
     traceback.print_exc()
 
+try:
+    # Load and spawn locks into the green cells (if LockLoader available)
+    from LockLoader import spawn_locks_in_green_cells
+    locks_group, locks = spawn_locks_in_green_cells(parent=pacmap_root if pacmap_root is not None else None,
+                                                     map_root=pacmap_root if pacmap_root is not None else None,
+                                                     attach_to_map=True)
+    print('[ExE] Locks spawned:', len(locks) if locks is not None else 0)
+except Exception:
+    print('[ExE] LockLoader not available or failed:')
+    traceback.print_exc()
+
 # Initialize KeyCollector so player can look at and click keys
 try:
     import KeyCollector
