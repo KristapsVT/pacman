@@ -7,7 +7,7 @@ import vizshape
 CELL_EMOJI = '🟪'  # purple tile marker in Map_Grid.txt
 DEFAULT_CELL_SIZE = 3.0
 # Place keys slightly above the ground so they don't z-fight with floor
-KEY_Y = 0.2
+KEY_Y = 0.15
 KEY_RADIUS = 0.25
 
 # Key asset filenames (placed in the package `assets` folder)
@@ -49,7 +49,7 @@ def _center_glb_local_in_wrapper(raw, center_blend=0.6, desired_bottom=0.0):
             pass
 
 
-def _load_key_model(filename, scale_factor=1.0, tint=None, fallback_color=(0.95, 0.9, 0.15), center_blend=0.6, desired_bottom=0.0):
+def _load_key_model(filename, scale_factor=1.0, tint=None, fallback_color=(0.95, 0.9, 0.15), center_blend=0.6, desired_bottom=0.0, desired_size=None):
     """Attempt to load a GLB key model from the package assets folder.
     Returns a group wrapper containing the visual. On failure, returns a simple primitive group.
     """
@@ -59,7 +59,28 @@ def _load_key_model(filename, scale_factor=1.0, tint=None, fallback_color=(0.95,
             wrapper = viz.addGroup()
             raw = viz.addChild(asset_path)
             raw.setParent(wrapper)
-            raw.setScale([scale_factor] * 3)
+            # apply initial scale factor
+            try:
+                raw.setScale([scale_factor] * 3)
+            except Exception:
+                pass
+
+            # If a desired_size (world units) is requested, compute the current X/Z size
+            # and apply an additional uniform scale so the key fits `desired_size` units
+            if desired_size is not None:
+                try:
+                    minX, minY, minZ, maxX, maxY, maxZ = raw.getBoundingBox()
+                    cur_w = maxX - minX
+                    cur_d = maxZ - minZ
+                    cur_max = max(cur_w, cur_d)
+                    if cur_max > 0:
+                        # bounding box values already account for the earlier scale
+                        extra_scale = float(desired_size) / float(cur_max)
+                        raw.setScale([scale_factor * extra_scale] * 3)
+                except Exception:
+                    pass
+
+            # Re-center after any scaling adjustments
             _center_glb_local_in_wrapper(raw, center_blend=center_blend, desired_bottom=desired_bottom)
             if tint is not None:
                 try:
@@ -73,7 +94,14 @@ def _load_key_model(filename, scale_factor=1.0, tint=None, fallback_color=(0.95,
     # Fallback primitive
     g = viz.addGroup()
     try:
-        node = vizshape.addSphere(radius=KEY_RADIUS)
+        # If a desired_size is provided, create a fallback sphere matching that size
+        if desired_size is not None and desired_size > 0:
+            try:
+                node = vizshape.addSphere(radius=(desired_size * 0.5))
+            except Exception:
+                node = vizshape.addSphere(radius=KEY_RADIUS)
+        else:
+            node = vizshape.addSphere(radius=KEY_RADIUS)
         try:
             node.color(*fallback_color)
         except Exception:
@@ -81,7 +109,11 @@ def _load_key_model(filename, scale_factor=1.0, tint=None, fallback_color=(0.95,
         node.setParent(g)
     except Exception:
         pass
-    g.setScale([scale_factor] * 3)
+    # apply overall group scale for legacy callers using scale_factor
+    try:
+        g.setScale([scale_factor] * 3)
+    except Exception:
+        pass
     if tint is not None:
         try:
             g.color(*tint)
@@ -132,7 +164,7 @@ def _read_grid(grid_path):
 
 def spawn_keys_on_map(parent=None, map_root=None, attach_to_map=True, visualize=True,
                       grid_path=None, cell_size=DEFAULT_CELL_SIZE, spawn_chance=1.0,
-                      num_keys=3, min_distance=None, key_offset=(0.5, 0.0, 0.5), center_blend=0.6):
+                      num_keys=3, min_distance=None, key_offset=(0.0, 0.0, 0.0), center_blend=0.6):
     """Spawn key nodes on purple tiles from `Map_Grid.txt`.
 
     Args:
@@ -265,8 +297,9 @@ def spawn_keys_on_map(parent=None, map_root=None, attach_to_map=True, visualize=
 
     for idx, pos in enumerate(chosen):
         if visualize:
-            # preserve original model size (do not rescale to cell size)
-            scale_factor = 3.0
+            # preserve original model size intent, but request a 1.0 world-size key
+            # so a 1x1 key fits centrally inside a 3x3 cell.
+            scale_factor = 1.0
             # Cycle through available key assets to provide variety
             asset_filename = _KEY_ASSETS[idx % len(_KEY_ASSETS)] if _KEY_ASSETS else None
             # choose sensible fallback tint based on filename
@@ -282,7 +315,7 @@ def spawn_keys_on_map(parent=None, map_root=None, attach_to_map=True, visualize=
             if asset_filename:
                 asset_path = os.path.normpath(os.path.join(os.path.dirname(__file__), 'assets', asset_filename))
                 print('[KeyLoader] Spawning key', idx, 'using asset:', asset_path, 'exists=', os.path.exists(asset_path), 'center_blend=', center_blend)
-                node = _load_key_model(asset_filename, scale_factor=scale_factor, tint=None, fallback_color=fallback, center_blend=center_blend, desired_bottom=0.0)
+                node = _load_key_model(asset_filename, scale_factor=scale_factor, tint=None, fallback_color=fallback, center_blend=center_blend, desired_bottom=0.0, desired_size=1.0)
             else:
                 node = vizshape.addSphere(radius=KEY_RADIUS)
                 try:

@@ -1,93 +1,41 @@
-# AI Coding Agent Instructions for `pacman`
+[//]: # "Concise Copilot instructions merged and simplified for quick AI onboarding"
 
-Concise, project-specific guidance to make productive, low-noise contributions. Focus on existing patterns; avoid generic boilerplate.
+# AI Coding Agent Instructions — pacman (concise)
 
-## 1. Purpose & Entry Point
+This file contains the minimal, actionable knowledge an AI coding agent needs to be immediately productive in this Vizard-based Pac‑Man prototype.
 
-Prototype Pac-Man style sandbox in Vizard (modules: `viz`, `vizact`, `vizshape`). Single runtime script: `horrorpackman/horrorpackman.py`. No packaging, no test suite, no extra build steps.
+**Big picture:** single-process runtime driven by `horrorpackman/horrorpackman.py`. Per-frame updates (AI, input, camera, animation) run from `vizact.ontimer(0, on_update)`.
 
-## 2. High-Level Architecture
+**Key files:**
 
-Single process, frame timer loop (`vizact.ontimer(0, on_update)`). Responsibilities split:
+- `horrorpackman/horrorpackman.py`: entry, constants (top of file), `on_update()`, `update_camera(dt)`.
+- `MapLoader.py`: parses `Map_Grid.txt` and spawns maze and colliders.
+- `KeyLoader.py`: input handlers and `keys` dict used by `on_update()`.
+- `PacMan_exe.py` and `PacManLoaderAndAnimations.py`: model-loading patterns and fallbacks.
 
-- Config constants (top of file) govern movement, camera, arena.
-- Player assembly (`load_player_model`) returns a group wrapper; transformations apply to wrapper not raw child.
-- Camera logic isolated in `update_camera(dt)`; movement logic in `on_update()` consumes horizontal forward vector returned by camera.
-- Bounds enforcement via `within_arena(node, radius)` (axis-aligned clamp in X/Z).
-- Input captured by key state dict (`keys`) updated via `vizact.onkeydown/onkeyup` lambdas.
-  Data flow per frame: input states -> movement vector -> player position clamp -> camera recompute -> view transform.
+**Project conventions (must follow):**
 
-## 3. Runtime & Commands
+- Constants: change only at the top of `horrorpackman.py` in UPPER_SNAKE_CASE.
+- Model loads: always wrap external asset loads in `try/except` and provide primitive fallbacks (see `PacMan_exe.py`).
+- Entities: create a wrapper group (`viz.addGroup()`), attach model children, and transform the wrapper (avoid transforming children directly).
+- Timing: do NOT create per-entity timers; put deterministic updates for movement/AI/animation inside `on_update()`.
+- Logging: use short bracketed tags like `[Model]`, `[Camera]`, `[Map]`, `[Ghost]`; avoid per-frame prints.
 
-Run with PowerShell (Vizard installed and importable):
+**Where to change behavior:**
 
-```powershell
-python horrorpackman\horrorpackman.py
-```
+- Camera math/smoothing: edit `update_camera(dt)` (it returns a horizontal forward vector used for movement).
+- Movement / AI / collisions / animation: edit `on_update()` in `horrorpackman.py`.
+- Map layout / spawn rules: edit `Map_Grid.txt` and `MapLoader.build_map(parent)`.
 
-No arguments currently. Restart in-session uses key `R`. If `assets/Person.glb` absent, primitive fallback auto-builds (non-fatal).
+**Runtime & debug:**
 
-## 4. Core Patterns & Conventions
+- Start (PowerShell): `python horrorpackman\\horrorpackman.py` (requires Vizard available in Python environment).
+- In-session keys: `R` restart, `Esc` quit, `W/A/S/D` move, `F` toggle camera view.
 
-- Constants: UPPER_SNAKE_CASE; extend here (e.g. add `GHOST_SPEED`) rather than scattering magic numbers.
-- Assets: Always relative via `os.path.join`; keep additions centralized as constants.
-- Pure helpers (math, smoothing) side-effect free; keep new math utilities similar.
-- Group wrappers for composite models (player, future ghosts) to avoid per-child transforms.
-- Perspective toggling: global `FIRST_PERSON` plus visibility flip; mirror pattern for additional modes (e.g. cinematic) via boolean flags.
-- Facing logic decoupled with `FACE_STRAFE_ONLY`; introduce new orientation styles through flags, not deep branching.
+**Concrete patterns / examples:**
 
-## 5. Camera & Movement
+- Add a ghost: `g = viz.addGroup()`; load model in `try/except`; log `[Ghost] init`; update wrapper position/yaw from `on_update()`.
+- Model fallback: if `assets/` model missing, create a primitive (sphere/box) to preserve tests and iteration speed.
+- Camera smoothing: tune `exp_smooth_factor` inside `update_camera`, do not re-smooth movement elsewhere.
 
-`update_camera` calculates yaw/pitch, derives a horizontal forward (ignores pitch) for movement. Third-person uses spherical offset with optional exponential smoothing (`exp_smooth_factor`). Maintain separation: do not merge camera interpolation into movement code. Clamp pitch with `PITCH_LIMIT` and floor with `CAMERA_MIN_HEIGHT_TP`.
-
-## 6. Map / Level Extension (`MapLoader.py`)
-
-Currently empty. Recommended pattern: symbolic grid -> iterate -> spawn walls via `vizshape.addBox`. Provide a `build_map(parent)` function returning a group. Integrate directly after floor/border creation. For collision beyond rectangular boundary, add spatial test before calling `within_arena` (keep clamp as fallback).
-
-## 7. Adding Entities (Ghosts, Pellets)
-
-Ghost template:
-
-1. Create group wrapper.
-2. Load model or primitives (with color tag). Log `[Ghost]` messages.
-3. Track local yaw; update in shared `on_update()` (batch updates) rather than multiple timers.
-4. Reuse `within_arena` for coarse bounds; refine with future maze collision.
-   Pellets: lightweight spheres; maintain a list; simple AABB or radial overlap with player each frame.
-
-## 8. Logging & Diagnostics
-
-Use short bracketed tags: `[Model]`, `[Camera]`, `[Map]`, `[Ghost]`. Avoid per-frame prints. Only log one-time initialization, mode toggles, load errors.
-
-## 9. Error Handling & Fallbacks
-
-Model load wrapped in `try/except`; continue on failure with primitives. Follow same pattern for new optional assets. Never terminate runtime for missing cosmetic assets.
-
-## 10. Performance Notes
-
-Single timer loop—keep new per-frame work minimal (basic math only). Batch entity updates; avoid creating additional high-frequency timers. Cache expensive geometry queries (bounding boxes) at load time only.
-
-## 11. Safe Modification Guidelines
-
-- Do not rename existing constants unless updating all references.
-- Preserve function boundaries: camera math stays in `update_camera`; player movement stays in `on_update`.
-- Maintain relative paths; no absolute Windows paths.
-- Add new flags rather than altering existing semantics (e.g., keep `FIRST_PERSON` meaning consistent).
-
-## 12. Quick Reference Keys
-
-W/A/S/D move | R restart | Esc quit | Tab mouse lock toggle | F FP/TP toggle (also flips invert Y)
-
-## 13. Pre-Commit Checklist
-
-1. Script runs without import errors (Vizard available).
-2. Player loads (fallback acceptable) and camera toggles with no jitter.
-3. Bounds clamping still effective after changes.
-4. New entities respect clamp or custom collision.
-
-## 14. Areas for Clarification
-
-Map format & collision abstraction unimplemented; pellet & scoring system absent. Provide feedback if formalizing these would help future contributions.
-
----
-
-Feedback welcome: note unclear sections (e.g. desired maze representation) for iterative refinement.
+If anything in this concise guide is unclear or you want extra examples (e.g., add a sample ghost spawn + `on_update()` patch), say which area to expand.

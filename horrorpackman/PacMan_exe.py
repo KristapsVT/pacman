@@ -4,6 +4,7 @@ Run this file to start the app with external MapLoader/KeyLoader orchestration.
 """
 import time
 import traceback
+# No launcher popups: user requested removal of on-screen text popups.
 
 # Import the main runtime (this module performs setup on import)
 try:
@@ -16,25 +17,17 @@ except Exception:
 # Allow the viz runtime a short moment to initialize
 time.sleep(0.05)
 
-# Attempt to load the Pac-Man animation module and run its animation
-try:
-    from PacManLoaderAndAnimations import run_pacman_animation
-    try:
-        pm_node = run_pacman_animation()
-        print('[ExE] PacMan animation started, node:', pm_node)
-    except Exception:
-        print('[ExE] PacMan animation failed to start:')
-        traceback.print_exc()
-except Exception:
-    print('[ExE] PacMan module not available or failed to import:')
-    traceback.print_exc()
+# Defer starting the Pac-Man animation until the map and player references are available.
 
 # Load map and keys (if available)
 pacmap_root = None
+wall_nodes = []
+floor_node = None
 try:
-    from MapLoader import build_and_attach_map
-    pacmap_root = build_and_attach_map()
-    print('[ExE] Map built, root:', pacmap_root)
+    # use load_pacmap to obtain wall nodes for AI collision checks
+    from MapLoader import load_pacmap
+    pacmap_root, floor_node, wall_nodes = load_pacmap(apply_style=True)
+    print('[ExE] Map built, root:', pacmap_root, 'walls:', len(wall_nodes))
 except Exception:
     print('[ExE] MapLoader not available or failed:')
     traceback.print_exc()
@@ -47,5 +40,24 @@ try:
 except Exception:
     print('[ExE] KeyLoader not available or failed:')
     traceback.print_exc()
+
+# Initialize KeyCollector so player can look at and click keys
+try:
+    import KeyCollector
+    try:
+        player_node = getattr(game, 'player', None)
+        if player_node is not None:
+            try:
+                KeyCollector.init(player_node)
+                print('[ExE] KeyCollector initialized')
+            except Exception:
+                print('[ExE] KeyCollector.init failed')
+        else:
+            print('[ExE] No player node found; KeyCollector not initialized')
+    except Exception:
+        print('[ExE] Failed to initialize KeyCollector:')
+        traceback.print_exc()
+except Exception:
+    print('[ExE] KeyCollector module not available')
 
 print('[ExE] Startup complete. Use the game window to interact.')
