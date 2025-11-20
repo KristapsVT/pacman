@@ -33,9 +33,14 @@ PACMAN_JUMP_FORWARD = 3
 # Default forward direction for jump (local/world unit vector). Default +Z
 PACMAN_JUMP_FORWARD_DIR = (0.0, 0.0, 1.0)
 
+# Tunable animation speed constants (lower values slow overall feel)
+DEFAULT_SQUASH_FREQ_HZ = 0.55  # was 1.0; slows time between jumps
+DEFAULT_JUMP_VEL = 2.6         # was 3.2; reduces vertical speed & hang frequency
+DEFAULT_GRAVITY = 8.8          # was 9.5; keeps similar arc but slightly longer airtime
 
 
-def run_pacman_animation(asset_relative='assets/PacMan.glb', base_scale=PACMAN_SIZE, freq_hz=1.0, width_amp=0.25, height_amp=0.25, jump_vel=3.2, gravity=9.5, jump_forward=PACMAN_JUMP_FORWARD, forward_dir=PACMAN_JUMP_FORWARD_DIR, position=(0,0,0), parent=None):
+
+def run_pacman_animation(asset_relative='assets/PacMan.glb', base_scale=PACMAN_SIZE, freq_hz=DEFAULT_SQUASH_FREQ_HZ, width_amp=0.22, height_amp=0.22, jump_vel=DEFAULT_JUMP_VEL, gravity=DEFAULT_GRAVITY, jump_forward=PACMAN_JUMP_FORWARD, forward_dir=PACMAN_JUMP_FORWARD_DIR, position=(0,0,0), parent=None):
     """Runs a repeating cycle:
     1) squash/stretch cycle (width expand, height shrink)
     2) when cycle returns to normal, trigger a jump

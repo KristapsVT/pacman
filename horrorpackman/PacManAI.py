@@ -21,10 +21,14 @@ PACMAN_Y = 0.35
 SIGHT_MAX_DIST = 9999.0  # rely on walls to block
 REPATH_INTERVAL_CHASE = 0.25
 REPATH_INTERVAL_WANDER = 1.25
+REPATH_INTERVAL_SEEK = 0.35  # repath rate while moving toward last seen position
 WANDER_REACH_CELLS = 6
 
-# Tiles
-WALL_EMOJI = '🟥'
+# Player interaction radius: inside this Pac-Man wanders, outside he pursues/ seeks
+PLAYER_WANDER_RADIUS = 10.0  # world units (updated to 10m as requested)
+
+# Tiles (treat both red and green blocks as walls)
+WALL_EMOJIS = {'🟥','🟩'}
 
 
 def _read_grid(path):
@@ -34,7 +38,7 @@ def _read_grid(path):
 
 
 class PacManChaser:
-    def __init__(self, map_root=None):
+    def __init__(self, map_root=None, existing_node=None):
         self.map_root = map_root
         self.grid = _read_grid(GRID_FILE) if os.path.exists(GRID_FILE) else []
         self.rows = len(self.grid)
@@ -60,21 +64,29 @@ class PacManChaser:
         spawn_rc = self._find_spawn_cell_near_center()
         self.grid_r, self.grid_c = spawn_rc
         wx, wz = self.grid_to_world(self.grid_r, self.grid_c)
-        # Build Pac-Man using animation loader; parent under map if available
-        self.node = run_pacman_animation(
-            position=(wx, PACMAN_Y, wz),
-            parent=self.map_root,
-            base_scale=PACMAN_SCALE,
-            jump_forward=CELL_SIZE,
-            forward_dir=(0.0, 0.0, 1.0)
-        )
-        if self.node is None:
-            # Fallback primitive if Vizard unavailable
-            self.node = viz.addGroup()
-            ball = vizshape.addSphere(radius=0.5)
-            ball.setParent(self.node)
-            self.node.setPosition([wx, PACMAN_Y, wz])
-            self.node.setScale([PACMAN_SCALE, PACMAN_SCALE, PACMAN_SCALE])
+        if existing_node is not None:
+            # Reuse externally created Pac-Man animation node
+            self.node = existing_node
+            try:
+                self.node.setPosition([wx, PACMAN_Y, wz])
+            except Exception:
+                pass
+        else:
+            # Build Pac-Man using animation loader; parent under map if available
+            self.node = run_pacman_animation(
+                position=(wx, PACMAN_Y, wz),
+                parent=self.map_root,
+                base_scale=PACMAN_SCALE,
+                jump_forward=CELL_SIZE,
+                forward_dir=(0.0, 0.0, 1.0)
+            )
+            if self.node is None:
+                # Fallback primitive if Vizard unavailable
+                self.node = viz.addGroup()
+                ball = vizshape.addSphere(radius=0.5)
+                ball.setParent(self.node)
+                self.node.setPosition([wx, PACMAN_Y, wz])
+                self.node.setScale([PACMAN_SCALE, PACMAN_SCALE, PACMAN_SCALE])
         self.facing_yaw = 0.0
 
         # Behavior state
@@ -82,13 +94,16 @@ class PacManChaser:
         self.current_path = []  # list of (r,c)
         self.next_path_idx = 0
         self.repath_timer = 0.0
+        self.last_seen_rc = None  # (r,c) of player when last in LOS
+        self.caught_player = False  # updated each frame by distance check
+        self._did_pounce_this_cycle = False
+        self.last_chase_target = None  # track last chosen chase goal (walkable cell)
 
-        # Animation state (simple squash-stretch to mimic chomping)
+        # Animation state
         self.anim_time = 0.0
-        self.anim_freq = 1.8
+        self.anim_freq = 1.0  # slowed from 1.8 for less frantic squash cycles
         self.anim_w_amp = 0.2
         self.anim_h_amp = 0.22
-
     # -----------------------------
     # Grid/World mapping
     # -----------------------------
@@ -125,7 +140,7 @@ class PacManChaser:
         if r < 0 or c < 0 or r >= self.rows or c >= self.cols:
             return False
         tile = self.grid[r][c] if c < len(self.grid[r]) else None
-        return tile is not None and tile != WALL_EMOJI
+        return tile is not None and tile not in WALL_EMOJIS
 
     # -----------------------------
     # Behavior utilities
@@ -217,6 +232,29 @@ class PacManChaser:
                 return (tr, tc)
         return from_rc
 
+    def _nearest_walkable(self, r, c, max_radius=25):
+        """Return nearest walkable cell to (r,c). If (r,c) walkable, returns it; else BFS outward."""
+        if self.is_walkable(r, c):
+            return (r, c)
+        visited = set([(r, c)])
+        frontier = [(r, c)]
+        for depth in range(1, max_radius + 1):
+            next_frontier = []
+            for cr, cc in frontier:
+                for dr, dc in [(1,0),(-1,0),(0,1),(0,-1)]:
+                    nr, nc = cr + dr, cc + dc
+                    if (nr, nc) in visited:
+                        continue
+                    visited.add((nr, nc))
+                    if 0 <= nr < self.rows and 0 <= nc < self.cols:
+                        if self.is_walkable(nr, nc):
+                            return (nr, nc)
+                        next_frontier.append((nr, nc))
+            if not next_frontier:
+                break
+            frontier = next_frontier
+        return None
+
     # -----------------------------
     # Public update
     # -----------------------------
@@ -236,28 +274,129 @@ class PacManChaser:
         if self.use_local and self.map_root is not None:
             mx, my, mz = self.map_root.getPosition()
             pr, pc = self.world_to_grid(px - mx, pz - mz)
+            pac_world_x = mx + nx
+            pac_world_z = mz + nz
         else:
             pr, pc = self.world_to_grid(px, pz)
+            pac_world_x = nx
+            pac_world_z = nz
 
-        # Decide mode by LOS
+        # World-space distance Pac-Man -> player (XZ plane)
+        dist_to_player = math.hypot(px - pac_world_x, pz - pac_world_z)
+        inside_radius = dist_to_player <= PLAYER_WANDER_RADIUS
+
+        # LOS check (grid-based) used to refresh last seen and determine chase vs seek
         in_sight = self._los_clear_grid((self.grid_r, self.grid_c), (pr, pc))
-        target_rc = (pr, pc) if in_sight else None
-        self.mode = 'chase' if in_sight else 'wander'
+        if in_sight:
+            self.last_seen_rc = (pr, pc)
 
-        # Repath timer
-        self.repath_timer -= dt
-        if self.repath_timer <= 0.0:
-            if self.mode == 'chase':
-                self.current_path = self._astar((self.grid_r, self.grid_c), (pr, pc))
-                self.repath_timer = REPATH_INTERVAL_CHASE
+        # Decide behavior mode and target cell (grid-based + pounce for fluid catch)
+        # If in LOS:
+        #   - if near player (within trigger) and not already caught -> pounce
+        #   - else chase using player's current cell
+        # Else out of LOS:
+        #   - if outside radius: seek last seen or wander
+        #   - if inside radius: wander (can't see player)
+        POUNCE_TRIGGER_DIST = (PACMAN_RADIUS + 0.22) + 0.6
+        POUNCE_OVERSHOOT = 0.4
+        # Determine chase goal (nearest walkable to player's grid cell)
+        chase_goal = self._nearest_walkable(pr, pc)
+        if chase_goal is None:
+            chase_goal = (pr, pc)  # may be non-walkable but gives direction
+        # Outside radius: always chase (ignore LOS) unless immediate pounce applies
+        if not inside_radius:
+            if in_sight and dist_to_player <= POUNCE_TRIGGER_DIST and not self.caught_player:
+                self.mode = 'pounce'
+                target_rc = None
+                repath_interval = REPATH_INTERVAL_CHASE
             else:
-                wander_goal = self._choose_wander_target((self.grid_r, self.grid_c))
-                self.current_path = self._astar((self.grid_r, self.grid_c), wander_goal)
-                self.repath_timer = REPATH_INTERVAL_WANDER
-            self.next_path_idx = 1  # index into path after current cell
+                self.mode = 'chase'
+                target_rc = chase_goal
+                repath_interval = REPATH_INTERVAL_CHASE
+        else:
+            # Inside radius: original mixed behavior
+            if in_sight:
+                if dist_to_player <= POUNCE_TRIGGER_DIST and not self.caught_player:
+                    self.mode = 'pounce'
+                    target_rc = None
+                    repath_interval = REPATH_INTERVAL_CHASE
+                else:
+                    self.mode = 'chase'
+                    target_rc = chase_goal
+                    repath_interval = REPATH_INTERVAL_CHASE
+            else:
+                if self.last_seen_rc is not None:
+                    self.mode = 'seek'
+                    target_rc = self.last_seen_rc
+                    repath_interval = REPATH_INTERVAL_SEEK
+                else:
+                    self.mode = 'wander'
+                    target_rc = None
+                    repath_interval = REPATH_INTERVAL_WANDER
+        # Track last chase goal
+        if self.mode == 'chase' and target_rc is not None:
+            self.last_chase_target = target_rc
 
-        # Move along path via jump-only animation steering
-        self._follow_path_jump(dt)
+        # Repath timer (skip for pounce since we override movement directly)
+        if self.mode != 'pounce':
+            self.repath_timer -= dt
+            if self.repath_timer <= 0.0:
+                if self.mode in ('chase','seek') and target_rc is not None:
+                    self.current_path = self._astar((self.grid_r, self.grid_c), target_rc)
+                    self.repath_timer = repath_interval
+                elif self.mode == 'wander':
+                    wander_goal = self._choose_wander_target((self.grid_r, self.grid_c))
+                    self.current_path = self._astar((self.grid_r, self.grid_c), wander_goal)
+                    self.repath_timer = REPATH_INTERVAL_WANDER
+                else:
+                    self.current_path = []
+                    self.repath_timer = REPATH_INTERVAL_WANDER
+                self.next_path_idx = 1
+            else:
+                # If chase goal changed, force quick repath
+                if self.mode == 'chase' and self.last_chase_target and target_rc != self.last_chase_target:
+                    self.current_path = self._astar((self.grid_r, self.grid_c), self.last_chase_target)
+                    self.next_path_idx = 1
+        else:
+            self.current_path = []  # ensure no path influences jump params
+            self.next_path_idx = 0
+
+        # Movement steering
+        if self.mode == 'pounce':
+            # Direct jump toward player with slight overshoot
+            dx = px - pac_world_x
+            dz = pz - pac_world_z
+            dist = math.hypot(dx, dz)
+            if dist > 1e-6:
+                vx = dx / dist
+                vz = dz / dist
+                jump_len = min(CELL_SIZE * 1.25, dist + POUNCE_OVERSHOOT)
+                try:
+                    if hasattr(self.node, 'set_jump_params'):
+                        self.node.set_jump_params(new_forward_dir=(vx,0.0,vz), new_jump_forward=jump_len)
+                except Exception:
+                    pass
+                desired_yaw = math.degrees(math.atan2(vx, vz))
+                self.facing_yaw = self._turn_towards(self.facing_yaw, desired_yaw, PACMAN_TURN_RATE * dt)
+                try:
+                    self.node.setEuler([self.facing_yaw,0,0])
+                except Exception:
+                    pass
+                self._did_pounce_this_cycle = True
+        else:
+            # Grid-relative jump steering
+            self._follow_path_jump(dt)
+
+        # Catch detection (generic distance check). After a pounce we allow tighter threshold.
+        catch_threshold = PACMAN_RADIUS + 0.22
+        if self.mode == 'pounce':
+            catch_threshold += 0.15  # small leniency during pounce
+        self.caught_player = (dist_to_player <= catch_threshold)
+
+        # If seeking and path finished, clear last seen and revert to wander
+        if self.mode == 'seek' and (not self.current_path or self.next_path_idx >= len(self.current_path)):
+            self.last_seen_rc = None
+            self.mode = 'wander'
 
         # Visual animation
         self._update_animation(dt)
