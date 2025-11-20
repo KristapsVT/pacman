@@ -22,6 +22,11 @@ PLAYER_MODEL_SCALE  = 0.35
 PLAYER_Y_OFFSET     = 0.35
 ASSET_PLAYER_GLTF   = os.path.join('assets','Person.glb')
 
+# Free camera testing mode (toggle with 'C')
+FREE_CAM            = False
+FREE_CAM_SPEED      = 18.0  # movement speed for free cam
+FREE_CAM_VERTICAL_SPEED = 12.0  # Q/E up/down
+
 FIRST_PERSON        = True
 CAMERA_DISTANCE_TP  = 5.5
 CAMERA_HEIGHT_FP    = 1.3
@@ -144,14 +149,25 @@ player.visible(False if FIRST_PERSON else True)
 # Map + Pac-Man chaser
 # -----------------------------
 pacmap_root = build_and_attach_map()
-pacman_ai = PacManChaser(map_root=pacmap_root)
+# Allow external launcher to inject Pac-Man AI by setting EXTERNAL_PACMAN_AI env var
+if not os.environ.get('EXTERNAL_PACMAN_AI'):
+    pacman_ai = PacManChaser(map_root=pacmap_root)
+else:
+    pacman_ai = None  # external launcher will create and attach
 
 # -----------------------------
 # Input
 # -----------------------------
 keys = {'w':False,'a':False,'s':False,'d':False}
+# Extra keys used only in free cam (Q/E vertical)
+keys.update({'q':False,'e':False})
 def set_key(k,s): keys[k]=s
 for k in ['w','a','s','d']:
+    vizact.onkeydown(k,lambda kk=k:set_key(kk,True))
+    vizact.onkeyup(k,lambda kk=k:set_key(kk,False))
+
+# Bind vertical free cam keys
+for k in ['q','e']:
     vizact.onkeydown(k,lambda kk=k:set_key(kk,True))
     vizact.onkeyup(k,lambda kk=k:set_key(kk,False))
 
@@ -178,6 +194,18 @@ def toggle_perspective():
     last_cam_pos = None
     player.visible(False if FIRST_PERSON else True)
 vizact.onkeydown('f', toggle_perspective)
+
+free_cam_pos = [0.0, 1.6, 0.0]  # initialized later when toggled on
+def toggle_free_cam():
+    global FREE_CAM, free_cam_pos
+    FREE_CAM = not FREE_CAM
+    if FREE_CAM:
+        free_cam_pos = viz.MainView.getPosition()[:]
+        print('[Camera] Free cam ENABLED')
+    else:
+        print('[Camera] Free cam DISABLED (returning to player camera)')
+    apply_mouse_lock()
+vizact.onkeydown('c', toggle_free_cam)
 
 # Use KeyLoader's helper to point to the nearest key (keeps logic centralized)
 try:
@@ -240,7 +268,7 @@ else:
 # Camera update (TP uses same yaw/pitch "view" as FP, just offset back)
 # -----------------------------
 def update_camera(dt):
-    global last_cam_pos
+    global last_cam_pos, free_cam_pos
     yaw_rad   = math.radians(cam_yaw)
     pitch_rad = math.radians(cam_pitch)
 
@@ -253,21 +281,25 @@ def update_camera(dt):
     hfx = math.sin(yaw_rad)
     hfz = math.cos(yaw_rad)
 
-    px,py,pz = player.getPosition()
-
-    if FIRST_PERSON:
-        target = [px, py + CAMERA_HEIGHT_FP, pz]
-        desired = target[:]  # camera at eye
-        look_at = [target[0] + dir_x*3.0, target[1] + dir_y*3.0, target[2] + dir_z*3.0]
+    if FREE_CAM:
+        # Free camera: position independent of player, treat like FP without player reference
+        desired = free_cam_pos[:]
+        look_at = [desired[0] + dir_x*3.0, desired[1] + dir_y*3.0, desired[2] + dir_z*3.0]
     else:
-        # FP-like control: same yaw/pitch direction; camera is just pulled back by fixed distance
-        target = [px, py + CAMERA_HEIGHT_TP, pz]
-        cam_x = target[0] - dir_x * CAMERA_DISTANCE_TP
-        cam_y = target[1] - dir_y * CAMERA_DISTANCE_TP
-        cam_z = target[2] - dir_z * CAMERA_DISTANCE_TP
-        cam_y = max(cam_y, CAMERA_MIN_HEIGHT_TP)  # keep slightly above floor
-        desired = [cam_x, cam_y, cam_z]
-        look_at = [target[0] + dir_x*0.01, target[1] + dir_y*0.01, target[2] + dir_z*0.01]
+        px,py,pz = player.getPosition()
+        if FIRST_PERSON:
+            target = [px, py + CAMERA_HEIGHT_FP, pz]
+            desired = target[:]  # camera at eye
+            look_at = [target[0] + dir_x*3.0, target[1] + dir_y*3.0, target[2] + dir_z*3.0]
+        else:
+            # FP-like control: same yaw/pitch direction; camera is just pulled back by fixed distance
+            target = [px, py + CAMERA_HEIGHT_TP, pz]
+            cam_x = target[0] - dir_x * CAMERA_DISTANCE_TP
+            cam_y = target[1] - dir_y * CAMERA_DISTANCE_TP
+            cam_z = target[2] - dir_z * CAMERA_DISTANCE_TP
+            cam_y = max(cam_y, CAMERA_MIN_HEIGHT_TP)  # keep slightly above floor
+            desired = [cam_x, cam_y, cam_z]
+            look_at = [target[0] + dir_x*0.01, target[1] + dir_y*0.01, target[2] + dir_z*0.01]
 
     if last_cam_pos is None:
         last_cam_pos = desired[:]
@@ -289,43 +321,61 @@ def on_update():
     dt = viz.getFrameElapsed()
     hfx,hfz = update_camera(dt)
 
-    # Player movement (horizontal only)
-    right_x = hfz
-    right_z = -hfx
+    if FREE_CAM:
+        # Free camera movement (WASD horizontal, Q/E vertical)
+        right_x = hfz
+        right_z = -hfx
+        mx = (1 if keys['d'] else 0) - (1 if keys['a'] else 0)
+        mz = (1 if keys['w'] else 0) - (1 if keys['s'] else 0)
+        vy = (1 if keys['e'] else 0) - (1 if keys['q'] else 0)
+        if mx or mz or vy:
+            vx = right_x*mx + hfx*mz
+            vz = right_z*mx + hfz*mz
+            l = math.hypot(vx,vz) or 1.0
+            if mx or mz:
+                vx /= l; vz /= l
+            speed = FREE_CAM_SPEED
+            free_cam_pos[0] += vx*speed*dt
+            free_cam_pos[2] += vz*speed*dt
+            free_cam_pos[1] += vy*FREE_CAM_VERTICAL_SPEED*dt
+    else:
+        # Player movement (horizontal only)
+        right_x = hfz
+        right_z = -hfx
 
-    mx = (1 if keys['d'] else 0) - (1 if keys['a'] else 0)
-    mz = (1 if keys['w'] else 0) - (1 if keys['s'] else 0)
+        mx = (1 if keys['d'] else 0) - (1 if keys['a'] else 0)
+        mz = (1 if keys['w'] else 0) - (1 if keys['s'] else 0)
 
-    moved = False
-    if mx or mz:
-        vx = right_x*mx + hfx*mz
-        vz = right_z*mx + hfz*mz
-        l = math.hypot(vx,vz) or 1.0
-        vx /= l; vz /= l
-        x,y,z = player.getPosition()
-        player.setPosition([x + vx*PLAYER_SPEED*dt, y, z + vz*PLAYER_SPEED*dt])
-        moved = True
+        moved = False
+        if mx or mz:
+            vx = right_x*mx + hfx*mz
+            vz = right_z*mx + hfz*mz
+            l = math.hypot(vx,vz) or 1.0
+            vx /= l; vz /= l
+            x,y,z = player.getPosition()
+            player.setPosition([x + vx*PLAYER_SPEED*dt, y, z + vz*PLAYER_SPEED*dt])
+            moved = True
 
-    global player_yaw
-    if not FIRST_PERSON:
-        if FACE_STRAFE_ONLY and mx != 0 and mz == 0:
-            if mx < 0:
-                player_yaw = cam_yaw - STRAFE_FACE_OFFSET
-            else:
-                player_yaw = cam_yaw + STRAFE_FACE_OFFSET
-            player.setEuler([player_yaw,0,0])
-        elif moved:
-            player_yaw = math.degrees(math.atan2(vx,vz))
-            player.setEuler([player_yaw,0,0])
+        global player_yaw
+        if not FIRST_PERSON:
+            if FACE_STRAFE_ONLY and mx != 0 and mz == 0:
+                if mx < 0:
+                    player_yaw = cam_yaw - STRAFE_FACE_OFFSET
+                else:
+                    player_yaw = cam_yaw + STRAFE_FACE_OFFSET
+                player.setEuler([player_yaw,0,0])
+            elif moved:
+                player_yaw = math.degrees(math.atan2(vx,vz))
+                player.setEuler([player_yaw,0,0])
 
     # Update Pac-Man chaser AI
+    # Update Pac-Man chaser AI (still based on player position, even in free cam)
     try:
         px, py, pz = player.getPosition()
         pacman_ai.update(dt, (px, py, pz))
-        # Simple collision with player (print/log only)
         if pacman_ai.collides_with_point((px, py, pz), radius=PLAYER_RADIUS):
             print('[PacMan] Collision: player caught!')
-    except Exception as e:
+    except Exception:
         pass
 
 vizact.ontimer(0,on_update)
@@ -339,4 +389,5 @@ print('  Restart: R')
 print('  Quit:    Esc')
 print('  Mouse lock ON/OFF: Tab')
 print('  FP/TP toggle: F (InvertY FP:', INVERT_Y_FP, ', InvertY TP:', INVERT_Y_TP, ')')
+print('  Free Cam toggle: C (WASD move, Q/E vertical)')
 print('Assets:', ASSET_PLAYER_GLTF)
