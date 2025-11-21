@@ -124,29 +124,9 @@ def load_model(asset_path, scale, tint=None, fallback_color=(0.9,0.85,0.15)):
 # Init
 # -----------------------------
 viz.setMultiSample(4)
-def _maximize_window():
-    try:
-        import platform
-        if hasattr(viz, 'setOption'):
-            # ask Vizard to open fullscreen if supported (do this before viz.go to avoid flicker)
-            try:
-                viz.setOption('viz.fullscreen', 1)
-            except Exception:
-                pass
-        # On Windows we can also try to set environment variable to hint fullscreen
-        if platform.system() == 'Windows':
-            try:
-                import os
-                os.environ['VIZ_FULLSCREEN'] = '1'
-            except Exception:
-                pass
-    except Exception:
-        pass
 
-try:
-    _maximize_window()
-except Exception:
-    pass
+try: from window_utils import _maximize_window; _maximize_window()
+except Exception: _maximize_window = lambda: None
 
 # Launch the viz runtime (fullscreen preference requested above)
 viz.go()
