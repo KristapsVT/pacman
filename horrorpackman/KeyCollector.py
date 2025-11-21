@@ -208,22 +208,23 @@ def _get_key_color(node):
             except Exception:
                 col = None
 
-        # If we have an RGB(A) tuple/list, normalize and map to nearest named color
+        # If we have an RGB(A) tuple/list, normalize and map to nearest of the
+        # three allowed colors: green(46b749), yellow(ffdd1a), white(dde2e4).
         if isinstance(col, (list, tuple)) and len(col) >= 3:
             try:
                 r, g, b = float(col[0]), float(col[1]), float(col[2])
                 # normalize if given in 0-255 range
                 if max(r, g, b) > 1.5:
                     r, g, b = r / 255.0, g / 255.0, b / 255.0
-                # simple nearest-color matching
+
+                # Target colors (normalized from hex):
+                # green  46b749 -> (70,183,73)
+                # yellow ffdd1a -> (255,221,26)
+                # white  dde2e4 -> (221,226,228)
                 named = {
-                    'green': (0.0, 1.0, 0.0),
-                    'yellow': (1.0, 1.0, 0.0),
-                    'white': (1.0, 1.0, 1.0),
-                    'red': (1.0, 0.0, 0.0),
-                    'blue': (0.0, 0.0, 1.0),
-                    'cyan': (0.0, 1.0, 1.0),
-                    'magenta': (1.0, 0.0, 1.0),
+                    'green': (70.0/255.0, 183.0/255.0, 73.0/255.0),
+                    'yellow': (255.0/255.0, 221.0/255.0, 26.0/255.0),
+                    'white': (221.0/255.0, 226.0/255.0, 228.0/255.0),
                 }
                 best_name = 'unknown'
                 best_d = float('inf')
@@ -236,7 +237,7 @@ def _get_key_color(node):
             except Exception:
                 pass
 
-        # Look for textual hints in common attributes
+        # Look for textual hints in common attributes (map to the three allowed colors)
         for attr in ('name', '_name', 'key_color', 'color_name', 'type'):
             try:
                 v = getattr(node, attr, None)
@@ -244,7 +245,7 @@ def _get_key_color(node):
                 v = None
             if isinstance(v, str):
                 s = v.lower()
-                for color in ('green', 'yellow', 'white', 'red', 'blue', 'cyan', 'magenta'):
+                for color in ('green', 'yellow', 'white'):
                     if color in s:
                         return color
 

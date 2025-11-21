@@ -98,5 +98,30 @@ try:
 except Exception:
     print('[ExE] KeyCollector module not available')
 
+# Initialize LockUnlocker so player can unlock nearby locks with collected keys
+try:
+    import LockUnlocker
+    try:
+        player_node = getattr(game, 'player', None)
+        if player_node is not None:
+            def _on_unlock(color, node):
+                try:
+                    print('[ExE] Lock unlocked:', color, 'node=', node)
+                except Exception:
+                    pass
+
+            try:
+                LockUnlocker.init(player_node, map_root=pacmap_root, on_unlock=_on_unlock)
+                print('[ExE] LockUnlocker initialized')
+            except Exception:
+                print('[ExE] LockUnlocker.init failed')
+        else:
+            print('[ExE] No player node found; LockUnlocker not initialized')
+    except Exception:
+        print('[ExE] Failed to initialize LockUnlocker:')
+        traceback.print_exc()
+except Exception:
+    print('[ExE] LockUnlocker module not available')
+
 print('[ExE] Startup complete. Waiting for delayed Pac-Man spawn...')
 

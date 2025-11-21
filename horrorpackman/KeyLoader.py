@@ -82,11 +82,26 @@ def _load_key_model(filename, scale_factor=1.0, tint=None, fallback_color=(0.95,
 
             # Re-center after any scaling adjustments
             _center_glb_local_in_wrapper(raw, center_blend=center_blend, desired_bottom=desired_bottom)
-            if tint is not None:
-                try:
+            # If no explicit tint was provided, try to apply a sensible
+            # authored tint based on filename so visuals and detection match.
+            try:
+                if tint is not None:
                     wrapper.color(*tint)
-                except Exception:
-                    pass
+                else:
+                    lname = filename.lower() if filename else ''
+                    if 'green' in lname:
+                        wrapper.color(70.0/255.0, 183.0/255.0, 73.0/255.0)
+                    elif 'yellow' in lname:
+                        wrapper.color(255.0/255.0, 221.0/255.0, 26.0/255.0)
+                    elif 'white' in lname:
+                        wrapper.color(221.0/255.0, 226.0/255.0, 228.0/255.0)
+            except Exception:
+                pass
+            # mark wrapper as an authored key asset so styling won't override its colors
+            try:
+                wrapper._is_key_asset = True
+            except Exception:
+                pass
             return wrapper
         except Exception as e:
             print('[KeyLoader] Model load error for', asset_path, ':', e)
@@ -144,10 +159,12 @@ def _style_keys(keys_list):
         if not n or isinstance(n, dict):
             continue
         try:
-            if i % 2 == 0:
-                n.color(0.00, 0.80, 1.00)
-            else:
-                n.color(0.02, 0.02, 0.02)
+            # Only apply style color to fallback primitives (non-asset keys).
+            if not getattr(n, '_is_key_asset', False):
+                if i % 2 == 0:
+                    n.color(0.00, 0.80, 1.00)
+                else:
+                    n.color(0.02, 0.02, 0.02)
         except Exception:
             pass
 

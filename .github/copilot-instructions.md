@@ -1,3 +1,57 @@
+"""
+AI Coding Agent Instructions — pacman (concise)
+
+This repo is a small Vizard-based Pac‑Man prototype. The project is single-process: the Player runtime creates scene nodes and uses `vizact.ontimer`-driven updates. The guidance below captures concrete, repo-specific patterns to help an AI agent be productive immediately.
+
+Big picture: The active runtime lives in `horrorpackman/Player.py` (imported by `PacMan_exe.py` for end-to-end runs). Map construction, key spawning, and optional Pac‑Man animation/AI are composed by the launcher `PacMan_exe.py`.
+
+Key files (jump here first):
+
+- `horrorpackman/Player.py` — main runtime; top-level constants and player setup.
+- `horrorpackman/PacMan_exe.py` — launcher that imports `Player`, builds the map, spawns keys/locks, and schedules the Pac‑Man spawn.
+- `horrorpackman/MapLoader.py` — `load_pacmap(parent=None, apply_style=True)` returns `(group, floor_node, wall_nodes)` and caches `_pacmap_center` / `_pacmap_bounds` on the group.
+- `horrorpackman/KeyLoader.py` — `spawn_keys_on_map(parent, map_root, attach_to_map, visualize, grid_path, cell_size, ...)` reads `Map_Grid.txt` (use `CELL_EMOJI = '🟪'`) and returns `(group, keys)`.
+- `horrorpackman/KeyCollector.py` — call `KeyCollector.init(player)` after the `player` node is created to enable pickup logic.
+- `horrorpackman/PacManAI.py` & `PacManLoaderAndAnimations.py` — AI helpers and Pac‑Man visual spawn.
+- `Map_Grid.txt` — emoji grid used by `KeyLoader` to pick spawn cells.
+
+Repository conventions & patterns:
+
+- Top-level constants: change only in `Player.py` (UPPER_SNAKE_CASE); other modules depend on these values.
+- Asset loading: wrap external loads in `try/except` and provide primitive fallbacks (see `_safe_add_child()` in `MapLoader.py` and `_load_key_model()` in `KeyLoader.py`).
+- Wrapper groups: create visuals inside a `viz.addGroup()` wrapper and transform the wrapper (do not transform child nodes directly).
+- Single update loop: deterministic updates (movement, AI, animation) are driven by `vizact.ontimer(0, ...)` or similar timers. Avoid per-entity timers.
+- Logging: use short bracketed tags like `[Map]`, `[Key]`, `[ExE]` to make console output traceable.
+
+Common edit points:
+
+- Map visuals / layout: edit `Map_Grid.txt` or `PACMAP_PARTS` in `MapLoader.py` to change floor/wall assets.
+- Key spawning: call `spawn_keys_on_map(...)` with `cell_size`, `spawn_chance`, `num_keys` to tune placement — it uses a farthest-point sampler to spread keys.
+- Pac‑Man spawn: `PacMan_exe.py` sets `os.environ['EXTERNAL_PACMAN_AI']='1'` and schedules `vizact.ontimer(3.0, _delayed_spawn)` to attach animation and `PacManChaser` AI.
+
+Concrete code snippets & helpers (examples):
+
+- Create/attach map: `pacmap_root, floor_node, wall_nodes = MapLoader.load_pacmap(apply_style=True)`
+- Spawn keys (attach to map): `keys_group, keys = KeyLoader.spawn_keys_on_map(parent=pacmap_root, map_root=pacmap_root, attach_to_map=True)`
+- Initialize collector: `KeyCollector.init(player_node)` (call after `player` exists)
+- Use centering helper: `_center_glb_local_in_wrapper(raw, center_blend=0.6, desired_bottom=0.0)` is used by `KeyLoader` for model alignment.
+
+Runtime & quick commands (PowerShell):
+Run launcher from repo root (Windows PowerShell):
+
+```
+python horrorpackman\PacMan_exe.py
+```
+
+Or run Player directly for iteration:
+
+```
+python horrorpackman\Player.py
+```
+
+Notes: the project expects the `viz` (Vizard) environment. If `viz` is missing, many modules will fail; keep fallbacks in mind during edits.
+
+If you want an example patch (e.g., add a ghost spawn in the update loop, or change key spawn logic), say which file to modify and I will prepare a focused change.
 [//]: # "Concise Copilot instructions merged and simplified for quick AI onboarding"
 [//]: # "Concise Copilot instructions for quick AI onboarding"
 
