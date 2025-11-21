@@ -16,6 +16,7 @@ PACMAN_TURN_RATE = 360.0  # deg/sec for smooth facing
 PACMAN_RADIUS = 0.45
 PACMAN_SCALE = 0.11
 PACMAN_Y = 0.35
+DOUBLE_JUMP_ENABLED = True  # allow straight 2-cell jumps (no diagonal)
 
 # LOS/behavior
 SIGHT_MAX_DIST = 9999.0  # rely on walls to block
@@ -27,8 +28,8 @@ WANDER_REACH_CELLS = 6
 # Player interaction radius: inside this Pac-Man wanders, outside he pursues/ seeks
 PLAYER_WANDER_RADIUS = 10.0  # world units (updated to 10m as requested)
 
-# Tiles (treat both red and green blocks as walls)
-WALL_EMOJIS = {'🟥','🟩'}
+# Tiles: restrict walkable tiles to blue/yellow/purple; everything else blocks
+WALKABLE_EMOJIS = {'🟦','🟨','🟪'}
 
 
 def _read_grid(path):
@@ -77,7 +78,7 @@ class PacManChaser:
                 position=(wx, PACMAN_Y, wz),
                 parent=self.map_root,
                 base_scale=PACMAN_SCALE,
-                jump_forward=CELL_SIZE,
+                jump_forward=CELL_SIZE,  # start with single-cell jump
                 forward_dir=(0.0, 0.0, 1.0)
             )
             if self.node is None:
@@ -140,7 +141,7 @@ class PacManChaser:
         if r < 0 or c < 0 or r >= self.rows or c >= self.cols:
             return False
         tile = self.grid[r][c] if c < len(self.grid[r]) else None
-        return tile is not None and tile not in WALL_EMOJIS
+        return tile in WALKABLE_EMOJIS
 
     # -----------------------------
     # Behavior utilities
@@ -299,13 +300,17 @@ class PacManChaser:
         #   - if inside radius: wander (can't see player)
         POUNCE_TRIGGER_DIST = (PACMAN_RADIUS + 0.22) + 0.6
         POUNCE_OVERSHOOT = 0.4
+        # Only allow pounce if player is in same or adjacent cell to avoid wall tunneling
+        cell_sep = abs(self.grid_r - pr) + abs(self.grid_c - pc)
+        def _can_pounce():
+            return in_sight and (cell_sep <= 1)
         # Determine chase goal (nearest walkable to player's grid cell)
         chase_goal = self._nearest_walkable(pr, pc)
         if chase_goal is None:
             chase_goal = (pr, pc)  # may be non-walkable but gives direction
         # Outside radius: always chase (ignore LOS) unless immediate pounce applies
         if not inside_radius:
-            if in_sight and dist_to_player <= POUNCE_TRIGGER_DIST and not self.caught_player:
+            if _can_pounce() and dist_to_player <= POUNCE_TRIGGER_DIST and not self.caught_player:
                 self.mode = 'pounce'
                 target_rc = None
                 repath_interval = REPATH_INTERVAL_CHASE
@@ -316,7 +321,7 @@ class PacManChaser:
         else:
             # Inside radius: original mixed behavior
             if in_sight:
-                if dist_to_player <= POUNCE_TRIGGER_DIST and not self.caught_player:
+                if _can_pounce() and dist_to_player <= POUNCE_TRIGGER_DIST and not self.caught_player:
                     self.mode = 'pounce'
                     target_rc = None
                     repath_interval = REPATH_INTERVAL_CHASE
@@ -370,7 +375,7 @@ class PacManChaser:
             if dist > 1e-6:
                 vx = dx / dist
                 vz = dz / dist
-                jump_len = min(CELL_SIZE * 1.25, dist + POUNCE_OVERSHOOT)
+                jump_len = min(CELL_SIZE * 2.0, dist + POUNCE_OVERSHOOT)  # cap pounce at 2 cells
                 try:
                     if hasattr(self.node, 'set_jump_params'):
                         self.node.set_jump_params(new_forward_dir=(vx,0.0,vz), new_jump_forward=jump_len)
@@ -404,28 +409,41 @@ class PacManChaser:
     def _follow_path_jump(self, dt):
         if not self.current_path or self.next_path_idx >= len(self.current_path):
             return
-        # Next desired cell
-        tr, tc = self.current_path[self.next_path_idx]
+        # Determine current cell reference
+        current_cell = self.current_path[self.next_path_idx - 1] if self.next_path_idx > 0 else self.current_path[0]
+        target_cell = self.current_path[self.next_path_idx]
+        advance = 1
+
+        # Attempt straight 2-cell jump if enabled and path allows
+        if DOUBLE_JUMP_ENABLED and (self.next_path_idx + 1) < len(self.current_path):
+            c1 = self.current_path[self.next_path_idx]
+            c2 = self.current_path[self.next_path_idx + 1]
+            # Straight corridor check: same row or same column for all three cells
+            if (c1[0] == c2[0] == current_cell[0]) or (c1[1] == c2[1] == current_cell[1]):
+                # Ensure step distance of 1 between consecutive cells (no gaps)
+                if (abs(c1[0]-current_cell[0]) + abs(c1[1]-current_cell[1]) == 1 and
+                    abs(c2[0]-c1[0]) + abs(c2[1]-c1[1]) == 1):
+                    target_cell = c2
+                    advance = 2
+
+        tr, tc = target_cell
         tx, tz = self.grid_to_world(tr, tc)
-        # Current pos
         cx, cy, cz = self.node.getPosition()
-        # Compute desired heading
-        dx = (tx - cx)
-        dz = (tz - cz)
+        dx = tx - cx
+        dz = tz - cz
         dist = math.hypot(dx, dz)
         if dist < 0.05:
-            # Arrived at next cell
-            self.next_path_idx += 1
+            self.next_path_idx += advance
             return
         vx = dx / max(dist, 1e-6)
         vz = dz / max(dist, 1e-6)
-        # Steer the next jump toward the target cell and set jump distance to one cell
+        jump_len = CELL_SIZE * advance
+        jump_len = min(jump_len, dist)  # avoid overshoot
         try:
             if hasattr(self.node, 'set_jump_params'):
-                self.node.set_jump_params(new_forward_dir=(vx, 0.0, vz), new_jump_forward=min(CELL_SIZE, dist))
+                self.node.set_jump_params(new_forward_dir=(vx, 0.0, vz), new_jump_forward=jump_len)
         except Exception:
             pass
-        # Smooth face for visual correctness
         desired_yaw = math.degrees(math.atan2(vx, vz))
         self.facing_yaw = self._turn_towards(self.facing_yaw, desired_yaw, PACMAN_TURN_RATE * dt)
         self.node.setEuler([self.facing_yaw, 0, 0])

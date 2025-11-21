@@ -1,28 +1,46 @@
 import os
-import random
 import math
 import viz
 import vizshape
 
-CELL_LOCK = '🟩'  # green tile marker where locks should appear
-CELL_WALL = '🟧'  # orange wall marker used as adjacency reference
-DEFAULT_CELL_SIZE = 3.0
-LOCK_Y = 1.0
+# Emoji markers in Map_Grid.txt
+WALL_EMOJI = '🟧'   # wall cell where locks should attach to (left of the lock cell)
+LOCK_CELL = '🟩'    # cell where lock sits (inside this cell)
 
+# Asset filenames (in package assets folder)
 _LOCK_ASSETS = ['Lock_Green.glb', 'Lock_White.glb', 'Lock_Yellow.glb']
-
 
 def _default_grid_path():
     return os.path.normpath(os.path.join(os.path.dirname(__file__), '..', 'Map_Grid.txt'))
 
-
 def _read_grid(grid_path):
     with open(grid_path, 'r', encoding='utf-8') as f:
         raw = [ln.rstrip('\n') for ln in f.readlines() if ln.strip()]
-    return [list(line) for line in raw]
+    grid = [list(line) for line in raw]
+    return grid
 
+def _center_glb_local_in_wrapper(raw, center_blend=0.6, desired_bottom=0.0):
+    # reuse centering heuristic similar to KeyLoader
+    try:
+        minX, minY, minZ, maxX, maxY, maxZ = raw.getBoundingBox()
+        cx = (minX + maxX) * 0.5
+        cz = (minZ + maxZ) * 0.5
+        try:
+            sx, sy, sz, sr = raw.getBoundingSphere()
+            a = float(center_blend)
+            cx = cx * (1.0 - a) + sx * a
+            cz = cz * (1.0 - a) + sz * a
+        except Exception:
+            pass
+        liftY = float(desired_bottom) - minY
+        raw.setPosition([-cx, liftY, -cz])
+    except Exception:
+        try:
+            raw.setPosition([0, 0, 0])
+        except Exception:
+            pass
 
-def _load_lock_model(filename, scale_factor=1.0, tint=None, fallback_color=(0.9,0.9,0.9), desired_bottom=0.0, desired_size=None):
+def _load_lock_model(filename, scale_factor=1.0, tint=None, fallback_color=(0.9, 0.9, 0.9), center_blend=0.6, desired_bottom=0.0, desired_size=None):
     asset_path = os.path.normpath(os.path.join(os.path.dirname(__file__), 'assets', filename))
     if os.path.exists(asset_path):
         try:
@@ -30,21 +48,21 @@ def _load_lock_model(filename, scale_factor=1.0, tint=None, fallback_color=(0.9,
             raw = viz.addChild(asset_path)
             raw.setParent(wrapper)
             try:
-                raw.setScale([scale_factor]*3)
+                raw.setScale([scale_factor] * 3)
             except Exception:
                 pass
-            # attempt to center like other loaders; best-effort
-            try:
-                minX, minY, minZ, maxX, maxY, maxZ = raw.getBoundingBox()
-                cx = (minX + maxX) * 0.5
-                cz = (minZ + maxZ) * 0.5
-                liftY = float(desired_bottom) - minY
-                raw.setPosition([-cx, liftY, -cz])
-            except Exception:
+            if desired_size is not None:
                 try:
-                    raw.setPosition([0, desired_bottom, 0])
+                    minX, minY, minZ, maxX, maxY, maxZ = raw.getBoundingBox()
+                    cur_w = maxX - minX
+                    cur_d = maxZ - minZ
+                    cur_max = max(cur_w, cur_d)
+                    if cur_max > 0:
+                        extra_scale = float(desired_size) / float(cur_max)
+                        raw.setScale([scale_factor * extra_scale] * 3)
                 except Exception:
                     pass
+            _center_glb_local_in_wrapper(raw, center_blend=center_blend, desired_bottom=desired_bottom)
             if tint is not None:
                 try:
                     wrapper.color(*tint)
@@ -54,10 +72,15 @@ def _load_lock_model(filename, scale_factor=1.0, tint=None, fallback_color=(0.9,
         except Exception as e:
             print('[LockLoader] Model load error for', asset_path, ':', e)
 
-    # fallback primitive
+    # Fallback primitive: small cylinder to resemble a lock
     g = viz.addGroup()
     try:
-        node = vizshape.addSphere(radius=0.25)
+        radius = 0.25
+        height = 0.35
+        if desired_size is not None and desired_size > 0:
+            radius = desired_size * 0.25
+            height = desired_size * 0.35
+        node = vizshape.addCylinder(height=height, radius=radius)
         try:
             node.color(*fallback_color)
         except Exception:
@@ -66,7 +89,7 @@ def _load_lock_model(filename, scale_factor=1.0, tint=None, fallback_color=(0.9,
     except Exception:
         pass
     try:
-        g.setScale([scale_factor]*3)
+        g.setScale([scale_factor] * 3)
     except Exception:
         pass
     if tint is not None:
@@ -77,27 +100,34 @@ def _load_lock_model(filename, scale_factor=1.0, tint=None, fallback_color=(0.9,
     return g
 
 
-def spawn_locks_on_map(parent=None, map_root=None, attach_to_map=True, grid_path=None, cell_size=DEFAULT_CELL_SIZE, lock_offset=(0.0, 0.0, 0.0), num_locks=3):
-    """Spawn lock nodes on `🟩` tiles, positioned against adjacent `🟧` wall tiles.
+def spawn_locks_on_map(map_root=None, attach_to_map=True, grid_path=None, cell_size=3.0, visualize=True, spacing=0.65):
+    """Spawn three locks according to Map_Grid.txt pattern.
 
-    - parent/map_root/attach_to_map behave like `KeyLoader.spawn_keys_on_map()`.
-    - Each lock is placed inside the green cell but nudged toward the adjacent orange wall.
-    - Cycles through `_LOCK_ASSETS` for variety.
+    Placement rule (per request):
+    - Find `🟩` cells that have a `🟧` directly to their left. We expect two such rows stacked vertically.
+    - Place the white lock in the top `🟩`, the green lock in the bottom `🟩`, and the yellow lock midway between them.
+    - Locks sit inside the `🟩` cell but are offset slightly toward the left (`🟧`) to appear attached to the wall.
+
+    Args:
+        spacing: float in (0..1+] that scales the vertical separation between the top and bottom lock positions
+                 relative to their midpoint. Values <1 bring locks closer together (default 0.65). Values 1 leave
+                 the original positions unchanged.
+
+    Returns: (group, dict) where dict contains keys: 'green','white','yellow' mapping to spawned viz nodes (or None).
     """
     if grid_path is None:
         grid_path = _default_grid_path()
-
     if not os.path.exists(grid_path):
         raise FileNotFoundError('Grid file not found: %s' % grid_path)
 
     grid = _read_grid(grid_path)
     if not grid:
-        return None, []
+        return None, {}
 
     rows = len(grid)
     cols = max(len(r) for r in grid)
 
-    # Determine map center (if map_root provides it)
+    # Determine map center and origin consistent with KeyLoader logic
     if map_root is not None and hasattr(map_root, '_pacmap_center'):
         center_x, center_z = map_root._pacmap_center
     else:
@@ -118,217 +148,110 @@ def spawn_locks_on_map(parent=None, map_root=None, attach_to_map=True, grid_path
     if attach_to_map and map_root is not None:
         group = map_root
     else:
-        group = parent if parent is not None else viz.addGroup()
+        group = viz.addGroup()
 
-    spawned = []
-    try:
-        ox, oy, oz = (float(lock_offset[0]), float(lock_offset[1]), float(lock_offset[2]))
-    except Exception:
-        ox, oy, oz = (0.0, 0.0, 0.0)
-
-    margin = max(0.2, cell_size * 0.12)  # how close to the wall the lock should be
-    EXTRA_PULL = max(0.25, margin * 1.0)  # when rotation causes protrusion, pull back this amount from the wall
-
-    # First, gather candidate positions: for each green cell, prefer positions nudged toward adjacent orange walls
+    # collect candidate lock cells: list of tuples (r, c, pos)
     candidates = []
-    green_cells = []
     for r in range(rows):
         row = grid[r]
         for c in range(cols):
             ch = row[c] if c < len(row) else None
-            if ch != CELL_LOCK:
+            if ch != LOCK_CELL:
+                continue
+            # check left neighbor exists and is wall emoji
+            left = row[c-1] if c-1 >= 0 and c-1 < len(row) else None
+            if left != WALL_EMOJI:
                 continue
             grid_r = (rows - 1 - r)
             if use_local:
                 lx = local_origin_x + (c * cell_size)
                 lz = local_origin_z + (grid_r * cell_size)
+                pos = [lx, 0.0, lz]
             else:
                 wx = origin_x + (c * cell_size)
                 wz = origin_z + (grid_r * cell_size)
-                lx = wx; lz = wz
-            green_cells.append((r, c, lx, lz))
+                pos = [wx, 0.0, wz]
+            candidates.append((r, c, pos))
 
-    # If exactly two green cells, place locks as requested: white on top, green on bottom, yellow between
-    if len(green_cells) == 2:
-        # sort by file-row index r (smaller r is visually top)
-        sorted_gc = sorted(green_cells, key=lambda x: x[0])
-        top = sorted_gc[0]
-        bottom = sorted_gc[1]
-        r_top, c_top, lx_top, lz_top = top
-        r_bot, c_bot, lx_bot, lz_bot = bottom
+    if not candidates:
+        print('[LockLoader] No suitable 🟩 cells with left 🟧 found')
+        return group, {'green': None, 'white': None, 'yellow': None}
 
-        # helper to find adjacent wall direction for a given green cell
-        def _adj_dir_for(rc_r, rc_c):
-            # returns (dx, dz) where dx/dz in {-1,0,1}
-            # left
-            try:
-                if rc_c - 1 >= 0 and (grid[rc_r][rc_c-1] if rc_c-1 < len(grid[rc_r]) else None) == CELL_WALL:
-                    return (-1, 0)
-            except Exception:
-                pass
-            # right
-            try:
-                if rc_c + 1 < cols and (grid[rc_r][rc_c+1] if rc_c+1 < len(grid[rc_r]) else None) == CELL_WALL:
-                    return (1, 0)
-            except Exception:
-                pass
-            # up
-            try:
-                if rc_r - 1 >= 0 and (grid[rc_r-1][rc_c] if rc_c < len(grid[rc_r-1]) else None) == CELL_WALL:
-                    return (0, 1)
-            except Exception:
-                pass
-            # down
-            try:
-                if rc_r + 1 < rows and (grid[rc_r+1][rc_c] if rc_c < len(grid[rc_r+1]) else None) == CELL_WALL:
-                    return (0, -1)
-            except Exception:
-                pass
-            return (0, 0)
+    # Prefer candidates in the same column (c) and pick the pair with largest vertical separation
+    by_col = {}
+    for r, c, pos in candidates:
+        by_col.setdefault(c, []).append((r, pos))
 
-        adj_top = _adj_dir_for(r_top, c_top)
-        adj_bot = _adj_dir_for(r_bot, c_bot)
+    chosen_pair = None
+    chosen_col = None
+    best_span = -1
+    for c, items in by_col.items():
+        if len(items) < 2:
+            continue
+        rs = sorted(items, key=lambda x: x[0])
+        span = rs[-1][0] - rs[0][0]
+        if span > best_span:
+            best_span = span
+            chosen_pair = (rs[0], rs[-1])
+            chosen_col = c
 
-        push = (cell_size / 2.0) - margin
-
-        # Yellow between both: midpoint
-        mid_x = (lx_top + lx_bot) * 0.5 + ox
-        mid_z = (lz_top + lz_bot) * 0.5 + oz
-
-        # Top (white) - nudge toward its adjacent wall if present, but never beyond cell edge
-        if adj_top != (0, 0):
-            # place toward wall, then pull back slightly to avoid rotated geometry clipping into wall
-            place_top_x = lx_top + (adj_top[0] * push) - (adj_top[0] * EXTRA_PULL) + ox
-            place_top_z = lz_top + (adj_top[1] * push) - (adj_top[1] * EXTRA_PULL) + oz
+    if chosen_pair is None:
+        # fallback: pick top-most and bottom-most candidates overall
+        all_sorted = sorted(candidates, key=lambda x: x[0])
+        if len(all_sorted) >= 2:
+            top = all_sorted[0]
+            bottom = all_sorted[-1]
+            chosen_pair = ((top[0], top[2]), (bottom[0], bottom[2]))
         else:
-            place_top_x = lx_top + ox
-            place_top_z = lz_top + oz
+            # only one candidate: duplicate it and place midpoint equal to it
+            only = candidates[0]
+            chosen_pair = ((only[0], only[2]), (only[0], only[2]))
 
-        # Bottom (green) - nudge toward its adjacent wall if present, but never beyond cell edge
-        if adj_bot != (0, 0):
-            # place toward wall, then pull back slightly to avoid rotated geometry clipping into wall
-            place_bot_x = lx_bot + (adj_bot[0] * push) - (adj_bot[0] * EXTRA_PULL) + ox
-            place_bot_z = lz_bot + (adj_bot[1] * push) - (adj_bot[1] * EXTRA_PULL) + oz
-        else:
-            place_bot_x = lx_bot + ox
-            place_bot_z = lz_bot + oz
+    # chosen_pair are tuples like (r, pos)
+    top_r, top_pos = chosen_pair[0]
+    bottom_r, bottom_pos = chosen_pair[1]
 
-        # Clamp top/bottom to remain inside their cell bounds (not inside wall)
-        half = cell_size / 2.0
-        min_x_top = lx_top - half + margin
-        max_x_top = lx_top + half - margin
-        min_z_top = lz_top - half + margin
-        max_z_top = lz_top + half - margin
-        place_top_x = max(min_x_top, min(max_x_top, place_top_x))
-        place_top_z = max(min_z_top, min(max_z_top, place_top_z))
+    # compute middle position
+    mid_pos = [(top_pos[0] + bottom_pos[0]) * 0.5,
+               (top_pos[1] + bottom_pos[1]) * 0.5,
+               (top_pos[2] + bottom_pos[2]) * 0.5]
 
-        min_x_bot = lx_bot - half + margin
-        max_x_bot = lx_bot + half - margin
-        min_z_bot = lz_bot - half + margin
-        max_z_bot = lz_bot + half - margin
-        place_bot_x = max(min_x_bot, min(max_x_bot, place_bot_x))
-        place_bot_z = max(min_z_bot, min(max_z_bot, place_bot_z))
+    # Optionally compress the vertical separation so locks appear closer together on the wall.
+    try:
+        s = float(spacing)
+        if s < 0.0:
+            s = 0.0
+    except Exception:
+        s = 1.0
 
-        # Align top/bottom so they share a common line with the midpoint (collinear)
-        # Prefer exact grid alignment using column/row indices
-        if c_top == c_bot:
-            # same column -> align X to midpoint
-            place_top_x = mid_x
-            place_bot_x = mid_x
-        elif r_top == r_bot:
-            # same row -> align Z to midpoint
-            place_top_z = mid_z
-            place_bot_z = mid_z
-        else:
-            # pick dominant axis of separation and align perpendicular coordinate to midpoint
-            dx_sep = abs(lx_top - lx_bot)
-            dz_sep = abs(lz_top - lz_bot)
-            if dx_sep > dz_sep:
-                place_top_z = mid_z
-                place_bot_z = mid_z
+    if s != 1.0:
+        # vector from midpoint to top/bottom
+        vtop = [top_pos[i] - mid_pos[i] for i in range(3)]
+        vbot = [bottom_pos[i] - mid_pos[i] for i in range(3)]
+        # scale vectors by spacing and recompute positions
+        top_pos = [mid_pos[i] + vtop[i] * s for i in range(3)]
+        bottom_pos = [mid_pos[i] + vbot[i] * s for i in range(3)]
+        # recompute midpoint for later yellow placement
+        mid_pos = [(top_pos[0] + bottom_pos[0]) * 0.5,
+                   (top_pos[1] + bottom_pos[1]) * 0.5,
+                   (top_pos[2] + bottom_pos[2]) * 0.5]
+
+    # offset toward wall (left side): move negative X by ~40% of cell_size
+    attach_offset = (-cell_size * 0.40, 0.0, 0.0)
+
+    # spawn helper
+    def _spawn_asset(kind, filename, world_pos, offset, desired_size=0.9, fallback=None):
+        if fallback is None:
+            if 'Green' in filename:
+                fallback = (0.2, 0.9, 0.2)
+            elif 'White' in filename:
+                fallback = (0.95, 0.95, 0.95)
+            elif 'Yellow' in filename:
+                fallback = (1.0, 0.9, 0.2)
             else:
-                place_top_x = mid_x
-                place_bot_x = mid_x
+                fallback = (0.9, 0.9, 0.9)
 
-        place_top = (place_top_x, LOCK_Y + oy, place_top_z)
-        place_bot = (place_bot_x, LOCK_Y + oy, place_bot_z)
-
-        # adjust midpoint slightly toward average wall direction if both share a wall direction
-        avg_dx = adj_top[0] + adj_bot[0]
-        avg_dz = adj_top[1] + adj_bot[1]
-        if avg_dx != 0 or avg_dz != 0:
-            ndx = -1 if avg_dx < 0 else (1 if avg_dx > 0 else 0)
-            ndz = -1 if avg_dz < 0 else (1 if avg_dz > 0 else 0)
-            mid_x += ndx * (push * 0.5)
-            mid_z += ndz * (push * 0.5)
-
-        place_mid = (mid_x, LOCK_Y + oy, mid_z)
-
-        # Now assign assets: white top, green bottom, yellow middle
-        chosen = [place_mid, place_top, place_bot]
-        asset_order = ['Lock_Yellow.glb', 'Lock_White.glb', 'Lock_Green.glb']
-
-        for idx, pos in enumerate(chosen):
-            place_x, place_y, place_z = pos
-            asset_filename = asset_order[idx] if asset_order and idx < len(asset_order) else (_LOCK_ASSETS[idx % len(_LOCK_ASSETS)] if _LOCK_ASSETS else None)
-            if asset_filename:
-                node = _load_lock_model(asset_filename, scale_factor=1.0, tint=None, fallback_color=(0.8,0.8,0.8), desired_bottom=0.0, desired_size=0.6)
-            else:
-                node = vizshape.addSphere(radius=0.25)
-                try:
-                    node.color(0.8,0.8,0.8)
-                except Exception:
-                    pass
-
-            try:
-                if attach_to_map and map_root is not None:
-                    node.setParent(map_root)
-                else:
-                    node.setParent(group)
-            except Exception:
-                pass
-            try:
-                node.setPosition((place_x, place_y, place_z))
-            except Exception:
-                pass
-            try:
-                # rotate to total 270 degrees yaw
-                node.setEuler([270, 0, 0])
-            except Exception:
-                pass
-            try:
-                node._is_lock = True
-            except Exception:
-                pass
-            try:
-                node.disable(viz.LIGHTING)
-            except Exception:
-                pass
-            spawned.append(node)
-        return group, spawned
-
-    # If not enough adjacency candidates, add centered positions inside green cells
-    for (r, c, lx, lz) in green_cells:
-        if len(candidates) >= num_locks:
-            break
-        candidates.append((lx + ox, LOCK_Y + oy, lz + oz))
-
-    # Trim or pad candidates to exactly num_locks
-    chosen = candidates[:num_locks]
-
-    for idx, pos in enumerate(chosen):
-        place_x, place_y, place_z = pos
-        asset_idx = idx % len(_LOCK_ASSETS) if _LOCK_ASSETS else 0
-        asset_filename = _LOCK_ASSETS[asset_idx] if _LOCK_ASSETS else None
-        if asset_filename:
-            node = _load_lock_model(asset_filename, scale_factor=1.0, tint=None, fallback_color=(0.8,0.8,0.8), desired_bottom=0.0, desired_size=0.6)
-        else:
-            node = vizshape.addSphere(radius=0.25)
-            try:
-                node.color(0.8,0.8,0.8)
-            except Exception:
-                pass
-
+        node = _load_lock_model(filename, scale_factor=1.0, tint=None, fallback_color=fallback, center_blend=0.6, desired_bottom=0.0, desired_size=desired_size)
         try:
             if attach_to_map and map_root is not None:
                 node.setParent(map_root)
@@ -337,23 +260,66 @@ def spawn_locks_on_map(parent=None, map_root=None, attach_to_map=True, grid_path
         except Exception:
             pass
         try:
-            node.setPosition((place_x, place_y, place_z))
-        except Exception:
-            pass
-        try:
-            # rotate 90 degrees yaw
-            node.setEuler([90, 0, 0])
+            node.setPosition((world_pos[0] + offset[0], world_pos[1] + offset[1], world_pos[2] + offset[2]))
         except Exception:
             pass
         try:
             node._is_lock = True
         except Exception:
             pass
-        try:
-            node.disable(viz.LIGHTING)
-        except Exception:
-            pass
-        spawned.append(node)
+        return node
+
+    # Spawn green in bottom, white in top, yellow in middle
+    spawned = {'green': None, 'white': None, 'yellow': None}
+    try:
+        spawned['green'] = _spawn_asset('green', _LOCK_ASSETS[0], bottom_pos, attach_offset)
+    except Exception:
+        spawned['green'] = None
+    try:
+        # white asset tends to be large in some exports; request a smaller desired_size
+        spawned['white'] = _spawn_asset('white', _LOCK_ASSETS[1], top_pos, attach_offset, desired_size=0.5)
+    except Exception:
+        spawned['white'] = None
+    try:
+        spawned['yellow'] = _spawn_asset('yellow', _LOCK_ASSETS[2], mid_pos, attach_offset)
+    except Exception:
+        spawned['yellow'] = None
+
+    # Apply styling similar to pacmap: disable lighting and assign sensible colors/scales
+    try:
+        def _style_locks(spawned_dict):
+            if not spawned_dict:
+                return
+            for key, node in spawned_dict.items():
+                if not node:
+                    continue
+                try:
+                    node.disable(viz.LIGHTING)
+                except Exception:
+                    pass
+                try:
+                    if key == 'green':
+                        node.color(0.2, 0.9, 0.2)
+                    elif key == 'white':
+                        node.color(0.95, 0.95, 0.95)
+                        # additionally scale down white lock wrappers which can be huge
+                        try:
+                            node.setScale([0.5, 0.5, 0.5])
+                        except Exception:
+                            pass
+                    elif key == 'yellow':
+                        node.color(1.0, 0.9, 0.2)
+                    else:
+                        try:
+                            node.color(0.9, 0.9, 0.9)
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+
+        _style_locks(spawned)
+    except Exception:
+        pass
 
     return group, spawned
 
