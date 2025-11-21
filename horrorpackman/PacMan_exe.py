@@ -5,6 +5,7 @@ Run this file to start the app with external MapLoader/KeyLoader orchestration.
 import time
 import traceback
 import os
+# No launcher popups: user requested removal of on-screen text popups.
 
 # Import the main runtime (this module performs setup on import)
 try:
@@ -36,15 +37,17 @@ except Exception:
     traceback.print_exc()
 
 # Load map and keys (if available)
-pacmap_root = getattr(game, 'pacmap_root', None)
-if pacmap_root is None:
-    try:
-        from MapLoader import build_and_attach_map
-        pacmap_root = build_and_attach_map()
-        print('[ExE] Map built (late), root:', pacmap_root)
-    except Exception:
-        print('[ExE] MapLoader not available or failed:')
-        traceback.print_exc()
+pacmap_root = None
+wall_nodes = []
+floor_node = None
+try:
+    # use load_pacmap to obtain wall nodes for AI collision checks
+    from MapLoader import load_pacmap
+    pacmap_root, floor_node, wall_nodes = load_pacmap(apply_style=True)
+    print('[ExE] Map built, root:', pacmap_root, 'walls:', len(wall_nodes))
+except Exception:
+    print('[ExE] MapLoader not available or failed:')
+    traceback.print_exc()
 
 try:
     from KeyLoader import spawn_keys_on_map
@@ -54,6 +57,38 @@ try:
 except Exception:
     print('[ExE] KeyLoader not available or failed:')
     traceback.print_exc()
+
+try:
+    # Load and spawn locks into the green cells (if LockLoader available)
+    from LockLoader import spawn_locks_in_green_cells
+    locks_group, locks = spawn_locks_in_green_cells(parent=pacmap_root if pacmap_root is not None else None,
+                                                     map_root=pacmap_root if pacmap_root is not None else None,
+                                                     attach_to_map=True)
+    print('[ExE] Locks spawned:', len(locks) if locks is not None else 0)
+except Exception:
+    print('[ExE] LockLoader not available or failed:')
+    traceback.print_exc()
+
+# Initialize KeyCollector so player can look at and click keys
+try:
+    import KeyCollector
+    try:
+        player_node = getattr(game, 'player', None)
+        if player_node is not None:
+            try:
+                KeyCollector.init(player_node)
+                print('[ExE] KeyCollector initialized')
+            except Exception:
+                print('[ExE] KeyCollector.init failed')
+        else:
+            print('[ExE] No player node found; KeyCollector not initialized')
+    except Exception:
+        print('[ExE] Failed to initialize KeyCollector:')
+        traceback.print_exc()
+except Exception:
+    print('[ExE] KeyCollector module not available')
+
+print('[ExE] Startup complete. Use the game window to interact.')
 
 # Attach AI to existing animation node (single Pac-Man instance)
 try:
@@ -68,3 +103,4 @@ except Exception:
     traceback.print_exc()
 
 print('[ExE] Startup complete. Use the game window to interact.')
+
