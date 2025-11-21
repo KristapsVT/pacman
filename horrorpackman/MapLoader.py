@@ -140,6 +140,16 @@ def load_pacmap(parent=None, apply_style=True):
 		group._pacmap_center = ((minX + maxX) / 2.0, (minZ + maxZ) / 2.0)
 		print('[Map] Cached pacmap bounds:', group._pacmap_bounds, 'center=', group._pacmap_center)
 
+	# Tag parts on group for downstream modules (colliders, etc.)
+	try:
+		group._pacmap_floor = floor_node
+	except Exception:
+		pass
+	try:
+		group._pacmap_walls = list(wall_nodes)
+	except Exception:
+		pass
+
 	return group, floor_node, wall_nodes
 
 # Optional quick build helper used by main script (import and call early):
@@ -148,6 +158,6 @@ def build_and_attach_map():
 	print('[Map] Build complete. Parts:', 'floor=ok' if f else 'floor=missing', 'walls', len(walls))
 	return g
 
-# Usage in horrorpackman.py after arena floor/border creation:
+# Usage in Player.py after arena floor/border creation:
 # from MapLoader import build_and_attach_map
 # pacmap_root = build_and_attach_map()

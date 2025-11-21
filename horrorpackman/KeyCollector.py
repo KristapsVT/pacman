@@ -1,6 +1,6 @@
 """Key collection helper: allow the player to look at keys and click to pick them up.
 
-Usage: call `KeyCollector.init(player)` from `horrorpackman.py` after the `player` node
+Usage: call `KeyCollector.init(player)` from `Player.py` after the `player` node
 is created (and after keys have been spawned). The module will create a small HUD
 showing collected keys and will remove key nodes when collected.
 
@@ -322,7 +322,7 @@ def _update(dt=0):
 def init(player, pick_distance=4.0, angle_threshold=20.0, on_collect=None):
     """Initialize the collector with the `player` node.
 
-    Call this from `horrorpackman.py` after `player` is created. Example:
+    Call this from `Player.py` after `player` is created. Example:
 
         import KeyCollector
         KeyCollector.init(player)

@@ -1,6 +1,7 @@
 """
-Launcher that runs the horrorpackman runtime and then loads the map and keys.
+Launcher that runs the Player runtime and then loads the map, keys, locks, and Pac-Man.
 Run this file to start the app with external MapLoader/KeyLoader orchestration.
+Former references to horrorpackman.py have been migrated to Player.py.
 """
 import time
 import traceback
@@ -9,12 +10,13 @@ import os
 
 # Import the main runtime (this module performs setup on import)
 try:
-    # Signal to horrorpackman not to auto-create Pac-Man AI
+    # Signal to Player runtime not to auto-create Pac-Man AI
     os.environ['EXTERNAL_PACMAN_AI'] = '1'
-    import horrorpackman as game
-    print('[ExE] Imported horrorpackman')
+    # Use Player module as the main runtime
+    import Player as game
+    print('[ExE] Imported Player runtime')
 except Exception:
-    print('[ExE] Failed importing horrorpackman:')
+    print('[ExE] Failed importing Player:')
     traceback.print_exc()
 
 # Allow the viz runtime a short moment to initialize
