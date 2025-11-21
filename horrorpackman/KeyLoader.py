@@ -152,7 +152,7 @@ def _style_keys(keys_list):
             pass
 
 def _default_grid_path():
-    # Map_Grid.txt is in the project root next to the horrorpackman package
+    # Map_Grid.txt is in the project root next to the Player runtime package
     return os.path.normpath(os.path.join(os.path.dirname(__file__), '..', 'Map_Grid.txt'))
 
 def _read_grid(grid_path):

@@ -100,7 +100,7 @@ def _load_lock_model(filename, scale_factor=1.0, tint=None, fallback_color=(0.9,
     return g
 
 
-def spawn_locks_on_map(map_root=None, attach_to_map=True, grid_path=None, cell_size=3.0, visualize=True, spacing=0.65):
+def spawn_locks_on_map(map_root=None, attach_to_map=True, grid_path=None, cell_size=3.0, visualize=True, spacing=0.40):
     """Spawn three locks according to Map_Grid.txt pattern.
 
     Placement rule (per request):
@@ -110,7 +110,7 @@ def spawn_locks_on_map(map_root=None, attach_to_map=True, grid_path=None, cell_s
 
     Args:
         spacing: float in (0..1+] that scales the vertical separation between the top and bottom lock positions
-                 relative to their midpoint. Values <1 bring locks closer together (default 0.65). Values 1 leave
+                 relative to their midpoint. Values <1 bring locks closer together (default 0.4). Values 1 leave
                  the original positions unchanged.
 
     Returns: (group, dict) where dict contains keys: 'green','white','yellow' mapping to spawned viz nodes (or None).
@@ -237,7 +237,7 @@ def spawn_locks_on_map(map_root=None, attach_to_map=True, grid_path=None, cell_s
                    (top_pos[2] + bottom_pos[2]) * 0.5]
 
     # offset toward wall (left side): move negative X by ~40% of cell_size
-    attach_offset = (-cell_size * 0.40, 0.0, 0.0)
+    attach_offset = (-cell_size * 0.36, 1.2, 1.2)
 
     # spawn helper
     def _spawn_asset(kind, filename, world_pos, offset, desired_size=0.9, fallback=None):

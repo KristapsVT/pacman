@@ -1,40 +1,51 @@
 """
-Launcher that runs the horrorpackman runtime and then loads the map and keys.
+Launcher that runs the Player runtime and then loads the map, keys, locks, and Pac-Man.
 Run this file to start the app with external MapLoader/KeyLoader orchestration.
+Former references to horrorpackman.py have been migrated to Player.py.
 """
 import time
 import traceback
 import os
+import vizact
 # No launcher popups: user requested removal of on-screen text popups.
 
 # Import the main runtime (this module performs setup on import)
 try:
-    # Signal to horrorpackman not to auto-create Pac-Man AI
+    # Signal to Player runtime not to auto-create Pac-Man AI
     os.environ['EXTERNAL_PACMAN_AI'] = '1'
-    import horrorpackman as game
-    print('[ExE] Imported horrorpackman')
+    # Use Player module as the main runtime
+    import Player as game
+    print('[ExE] Imported Player runtime')
 except Exception:
-    print('[ExE] Failed importing horrorpackman:')
+    print('[ExE] Failed importing Player:')
     traceback.print_exc()
 
 # Allow the viz runtime a short moment to initialize
 time.sleep(0.05)
 
-# Attempt to load the Pac-Man animation module and run its animation
 pm_node = None
-try:
-    from PacManLoaderAndAnimations import run_pacman_animation
+def _delayed_spawn():
+    global pm_node
+    if pm_node is not None:
+        return
     try:
-        # Parent under map root if already built
+        from PacManLoaderAndAnimations import run_pacman_animation
         parent_root = getattr(game, 'pacmap_root', None)
         pm_node = run_pacman_animation(parent=parent_root)
-        print('[ExE] PacMan animation started, node:', pm_node)
+        print('[ExE] PacMan animation spawned after 3s delay:', pm_node)
+        try:
+            from PacManAI import PacManChaser
+            game.pacman_ai = PacManChaser(map_root=parent_root, existing_node=pm_node)
+            print('[ExE] PacMan AI attached after delay')
+        except Exception:
+            print('[ExE] PacMan AI attach failed after delay:')
+            traceback.print_exc()
     except Exception:
-        print('[ExE] PacMan animation failed to start:')
+        print('[ExE] PacMan animation spawn failed:')
         traceback.print_exc()
-except Exception:
-    print('[ExE] PacMan module not available or failed to import:')
-    traceback.print_exc()
+
+vizact.ontimer(3.0, _delayed_spawn)
+print('[ExE] Scheduled Pac-Man spawn after 3 seconds')
 
 # Load map and keys (if available)
 pacmap_root = None
@@ -87,19 +98,5 @@ try:
 except Exception:
     print('[ExE] KeyCollector module not available')
 
-print('[ExE] Startup complete. Use the game window to interact.')
-
-# Attach AI to existing animation node (single Pac-Man instance)
-try:
-    if pm_node is not None:
-        from PacManAI import PacManChaser
-        game.pacman_ai = PacManChaser(map_root=pacmap_root, existing_node=pm_node)
-        print('[ExE] PacMan AI attached to existing animation node')
-    else:
-        print('[ExE] Skipped AI attach: animation node missing')
-except Exception:
-    print('[ExE] Failed to attach PacMan AI:')
-    traceback.print_exc()
-
-print('[ExE] Startup complete. Use the game window to interact.')
+print('[ExE] Startup complete. Waiting for delayed Pac-Man spawn...')
 

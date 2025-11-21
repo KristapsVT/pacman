@@ -130,9 +130,6 @@ def load_model(asset_path, scale, tint=None, fallback_color=(0.9,0.85,0.15)):
 # -----------------------------
 viz.setMultiSample(4)
 
-try: from window_utils import _maximize_window; _maximize_window()
-except Exception: _maximize_window = lambda: None
-
 # Launch the viz runtime (fullscreen preference requested above)
 viz.go()
 viz.clearcolor(0.10,0.10,0.14)
