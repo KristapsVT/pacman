@@ -124,6 +124,31 @@ def load_model(asset_path, scale, tint=None, fallback_color=(0.9,0.85,0.15)):
 # Init
 # -----------------------------
 viz.setMultiSample(4)
+def _maximize_window():
+    try:
+        import platform
+        if hasattr(viz, 'setOption'):
+            # ask Vizard to open fullscreen if supported (do this before viz.go to avoid flicker)
+            try:
+                viz.setOption('viz.fullscreen', 1)
+            except Exception:
+                pass
+        # On Windows we can also try to set environment variable to hint fullscreen
+        if platform.system() == 'Windows':
+            try:
+                import os
+                os.environ['VIZ_FULLSCREEN'] = '1'
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+try:
+    _maximize_window()
+except Exception:
+    pass
+
+# Launch the viz runtime (fullscreen preference requested above)
 viz.go()
 viz.clearcolor(0.10,0.10,0.14)
 viz.mouse.setOverride(viz.ON)
@@ -258,6 +283,42 @@ def _on_mouse_move(e):
         delta_pitch = -delta_pitch
     cam_pitch += delta_pitch
     cam_pitch = clamp(cam_pitch, -PITCH_LIMIT, PITCH_LIMIT)
+    # If mouse is locked, re-center the OS cursor to the window center so
+    # subsequent mouse movement deltas continue coming from the center.
+    try:
+        if mouse_locked:
+            # Try window-size APIs in order of likelihood
+            cx = cy = None
+            try:
+                if hasattr(viz, 'window') and hasattr(viz.window, 'getSize'):
+                    sz = viz.window.getSize()
+                    if sz and len(sz) >= 2:
+                        cx = float(sz[0]) * 0.5
+                        cy = float(sz[1]) * 0.5
+            except Exception:
+                cx = cy = None
+            try:
+                if (cx is None or cy is None) and hasattr(viz, 'getWindowSize'):
+                    sz = viz.getWindowSize()
+                    if sz and len(sz) >= 2:
+                        cx = float(sz[0]) * 0.5
+                        cy = float(sz[1]) * 0.5
+            except Exception:
+                cx = cy = None
+
+            if cx is not None and cy is not None:
+                try:
+                    # viz.mouse.setPosition expects a 2-tuple/list [x,y]
+                    if hasattr(viz.mouse, 'setPosition'):
+                        viz.mouse.setPosition([cx, cy])
+                    else:
+                        # some builds expose as viz.setMousePosition
+                        if hasattr(viz, 'setMousePosition'):
+                            viz.setMousePosition([cx, cy])
+                except Exception:
+                    pass
+    except Exception:
+        pass
 
 if hasattr(viz,'MOUSE_MOVE_EVENT'):
     viz.callback(viz.MOUSE_MOVE_EVENT, _on_mouse_move)
