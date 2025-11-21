@@ -3,42 +3,49 @@
 
 # AI Coding Agent Instructions — pacman (concise)
 
-This repository is a small Vizard-based Pac‑Man prototype. Below are the minimal, concrete patterns an AI agent needs to be productive.
+This is a small Vizard-based Pac‑Man prototype. The notes below capture the concrete, repo-specific patterns an AI coding agent should follow to be productive quickly.
 
-**Big picture:** single-process runtime. The main loop is in `horrorpackman/horrorpackman.py` and executes per-frame logic via `vizact.ontimer(0, on_update)`.
+**Big picture:** single-process runtime. The main per-frame loop lives in `horrorpackman/horrorpackman.py` and is driven by `vizact.ontimer(0, on_update)`. Most game logic (movement, AI, animation, collisions, camera math) runs inside `on_update()`.
 
 **Key files (jump here first):**
 
-- `horrorpackman/horrorpackman.py` — application entry, top-level UPPER_SNAKE_CASE constants, `on_update()` (movement/AI/animation), `update_camera(dt)` (camera math).
-- `MapLoader.py` — loads maze parts from `assets/`, provides `load_pacmap()` and caches `_pacmap_center`/\_bounds used by `KeyLoader`.
-- `KeyLoader.py` — reads `Map_Grid.txt` (purple cell emoji `🟪`) and spawns keys with `spawn_keys_on_map()`; returns nodes or logical positions.
-- `PacMan_exe.py` — lightweight launcher that imports the runtime, then builds the map, keys and initializes `KeyCollector`.
+- `horrorpackman/horrorpackman.py` — application entry; top-level UPPER_SNAKE_CASE constants; `on_update()` (movement/AI/animation); `update_camera(dt)` (camera math).
+- `horrorpackman/MapLoader.py` — builds the maze from `assets/` and `Map_Grid.txt`; computes `_pacmap_center` and bounds used by key placement.
+- `horrorpackman/KeyLoader.py` — parses `Map_Grid.txt` and provides `spawn_keys_on_map()`; uses the map center to align keys.
+- `horrorpackman/KeyCollector.py` — runtime component attached to the player for key pickup logic.
+- `horrorpackman/PacMan_exe.py` — launcher that assembles the map, spawns keys, and starts the runtime (use this for end-to-end testing).
+- `horrorpackman/PacManAI.py` and `PacManLoaderAndAnimations.py` — AI helpers and model/animation loading patterns.
 
 **Project-specific conventions (follow exactly):**
 
-- Constants: change only at the very top of `horrorpackman.py` (UPPER_SNAKE_CASE).
+- Constants: change only at the very top of `horrorpackman.py` (UPPER_SNAKE_CASE). Other files expect those values.
 - Model loads: always wrap external asset loads in `try/except` and provide primitive fallbacks (see `load_model()` in `horrorpackman.py` and `_load_key_model()` in `KeyLoader.py`).
-- Entities: create a wrapper group via `viz.addGroup()`, attach child visuals, and transform the wrapper (avoid transforming children directly).
-- Timing: put all deterministic updates (movement, AI, animation) in `on_update()` — do NOT create per-entity timers.
-- Logging: use short bracketed tags like `[Model]`, `[Map]`, `[Key]`, `[Camera]`; avoid printing every frame.
+- Entity wrappers: create a wrapper group via `viz.addGroup()`, attach visuals to that group, and transform the wrapper (do not transform children directly).
+- Timing: put all deterministic updates (movement, AI, animation) in `on_update()` — do NOT create per-entity timers. This ensures consistent single-threaded updates.
+- Logging: use short bracketed tags like `[Model]`, `[Map]`, `[Key]`, `[Camera]`. Avoid high-frequency prints (e.g., per-frame) to prevent console spam.
 
 **Where to change behavior (common edit points):**
 
-- Camera smoothing/math: `update_camera(dt)` in `horrorpackman.py` (returns horizontal forward vector used by movement).
-- Player movement / AI / collisions / animation: `on_update()` in `horrorpackman.py`.
-- Map layout: `Map_Grid.txt` (root) and `MapLoader.build_map()` for which assets to use.
-- Key placement: `KeyLoader.spawn_keys_on_map()` — parameters: `grid_path`, `cell_size`, `num_keys`, `spawn_chance`, `attach_to_map`.
+- Camera smoothing/math: `update_camera(dt)` in `horrorpackman.py` (this returns forward/horizontal vectors used by movement code).
+- Player movement / AI / collisions / animation: `on_update()` in `horrorpackman.py` and supporting functions in `PacManAI.py`.
+- Map layout: edit `Map_Grid.txt` (root) and adjust `MapLoader.build_map()` to choose assets for different characters.
+- Key placement: `KeyLoader.spawn_keys_on_map(grid_path, cell_size, num_keys, spawn_chance, attach_to_map)` — use these params when tuning spawn behavior.
 
-**Runtime & debugging commands (PowerShell):**
+**Runtime & debugging (PowerShell):**
 
-- Run main runtime directly: `python horrorpackman\\horrorpackman.py` (use when iterating camera/player code).
-- Run the launcher that also builds map/keys: `python horrorpackman\\PacMan_exe.py`.
-- In-session keys: `W/A/S/D` move, `R` restart, `Esc` quit, `Tab` toggle mouse lock, `F` toggle FP/TP, `K` points camera/player to nearest key.
+- Run the core runtime for camera/player iteration: `python horrorpackman\\horrorpackman.py`.
+- Run the full launcher (map + keys): `python horrorpackman\\PacMan_exe.py`.
+- In-session keys: `W/A/S/D` move, `R` restart, `Esc` quit, `Tab` toggle mouse lock, `F` toggle FP/TP, `K` point camera/player to nearest key.
 
-**Concrete examples / code patterns:**
+**Assets & dependencies:**
 
-- Model fallback: `load_model(asset_path, scale, tint)` returns a `viz.addGroup()` wrapper; if the file is missing it creates primitives (sphere/cylinder) so scenes remain testable.
-- Wrapper + centering: many loaders call helper `_center_glb_local_in_wrapper(raw)` to align model pivot and bottom-align to floor — reuse this when adding models.
-- Map-key alignment: `MapLoader.load_pacmap()` computes `_pacmap_center`; `KeyLoader.spawn_keys_on_map()` uses that center and `Map_Grid.txt` to place keys consistently.
+- Assets live in `horrorpackman/assets/`. Asset loads must tolerate missing files via fallbacks so the scene remains testable.
+- The project expects the `viz` (Vizard) environment. If not present, many modules will fail — prefer running inside the developer's Vizard setup.
 
-If any part is unclear or you want an example patch (e.g., add a sample ghost spawn + `on_update()` patch), tell me which area to expand and I will add it.
+**Concrete code patterns to reuse:**
+
+- Model fallback: `load_model(asset_path, scale, tint)` returns a `viz.addGroup()` wrapper and falls back to primitives when files are missing.
+- Centering helper: use `_center_glb_local_in_wrapper(raw)` (used across loaders) to align model pivots and bottom-align to the floor.
+- Map-key alignment: `MapLoader.load_pacmap()` computes `_pacmap_center`; `KeyLoader.spawn_keys_on_map()` uses that center and the emoji-grid in `Map_Grid.txt` (look for `🟪`) to position keys.
+
+If any part is unclear or you want an example patch (for example, add a ghost spawn in `on_update()`), tell me which area to expand and I'll prepare a focused change.
