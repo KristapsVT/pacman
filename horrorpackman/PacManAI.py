@@ -16,7 +16,7 @@ PACMAN_TURN_RATE = 360.0  # deg/sec for smooth facing
 PACMAN_RADIUS = 0.45
 PACMAN_SCALE = 0.11
 PACMAN_Y = 0.35
-JUMP_FORWARD_FACTOR = 2  # increase jump distance beyond one cell
+DOUBLE_JUMP_ENABLED = True  # allow straight 2-cell jumps (no diagonal)
 
 # LOS/behavior
 SIGHT_MAX_DIST = 9999.0  # rely on walls to block
@@ -78,7 +78,7 @@ class PacManChaser:
                 position=(wx, PACMAN_Y, wz),
                 parent=self.map_root,
                 base_scale=PACMAN_SCALE,
-                jump_forward=CELL_SIZE * JUMP_FORWARD_FACTOR,
+                jump_forward=CELL_SIZE,  # start with single-cell jump
                 forward_dir=(0.0, 0.0, 1.0)
             )
             if self.node is None:
@@ -375,7 +375,7 @@ class PacManChaser:
             if dist > 1e-6:
                 vx = dx / dist
                 vz = dz / dist
-                jump_len = min(CELL_SIZE * 1.25 * JUMP_FORWARD_FACTOR, dist + POUNCE_OVERSHOOT)
+                jump_len = min(CELL_SIZE * 2.0, dist + POUNCE_OVERSHOOT)  # cap pounce at 2 cells
                 try:
                     if hasattr(self.node, 'set_jump_params'):
                         self.node.set_jump_params(new_forward_dir=(vx,0.0,vz), new_jump_forward=jump_len)
@@ -409,28 +409,41 @@ class PacManChaser:
     def _follow_path_jump(self, dt):
         if not self.current_path or self.next_path_idx >= len(self.current_path):
             return
-        # Next desired cell
-        tr, tc = self.current_path[self.next_path_idx]
+        # Determine current cell reference
+        current_cell = self.current_path[self.next_path_idx - 1] if self.next_path_idx > 0 else self.current_path[0]
+        target_cell = self.current_path[self.next_path_idx]
+        advance = 1
+
+        # Attempt straight 2-cell jump if enabled and path allows
+        if DOUBLE_JUMP_ENABLED and (self.next_path_idx + 1) < len(self.current_path):
+            c1 = self.current_path[self.next_path_idx]
+            c2 = self.current_path[self.next_path_idx + 1]
+            # Straight corridor check: same row or same column for all three cells
+            if (c1[0] == c2[0] == current_cell[0]) or (c1[1] == c2[1] == current_cell[1]):
+                # Ensure step distance of 1 between consecutive cells (no gaps)
+                if (abs(c1[0]-current_cell[0]) + abs(c1[1]-current_cell[1]) == 1 and
+                    abs(c2[0]-c1[0]) + abs(c2[1]-c1[1]) == 1):
+                    target_cell = c2
+                    advance = 2
+
+        tr, tc = target_cell
         tx, tz = self.grid_to_world(tr, tc)
-        # Current pos
         cx, cy, cz = self.node.getPosition()
-        # Compute desired heading
-        dx = (tx - cx)
-        dz = (tz - cz)
+        dx = tx - cx
+        dz = tz - cz
         dist = math.hypot(dx, dz)
         if dist < 0.05:
-            # Arrived at next cell
-            self.next_path_idx += 1
+            self.next_path_idx += advance
             return
         vx = dx / max(dist, 1e-6)
         vz = dz / max(dist, 1e-6)
-        # Steer the next jump toward the target cell and set jump distance to one cell
+        jump_len = CELL_SIZE * advance
+        jump_len = min(jump_len, dist)  # avoid overshoot
         try:
             if hasattr(self.node, 'set_jump_params'):
-                self.node.set_jump_params(new_forward_dir=(vx, 0.0, vz), new_jump_forward=min(CELL_SIZE * JUMP_FORWARD_FACTOR, dist))
+                self.node.set_jump_params(new_forward_dir=(vx, 0.0, vz), new_jump_forward=jump_len)
         except Exception:
             pass
-        # Smooth face for visual correctness
         desired_yaw = math.degrees(math.atan2(vx, vz))
         self.facing_yaw = self._turn_towards(self.facing_yaw, desired_yaw, PACMAN_TURN_RATE * dt)
         self.node.setEuler([self.facing_yaw, 0, 0])

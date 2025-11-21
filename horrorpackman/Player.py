@@ -213,7 +213,17 @@ def _cell_center_world(r,c):
     return (cx, cz)
 # Allow external launcher to inject Pac-Man AI by setting EXTERNAL_PACMAN_AI env var
 if not os.environ.get('EXTERNAL_PACMAN_AI'):
-    pacman_ai = PacManChaser(map_root=pacmap_root)
+    pacman_ai = None
+    def _spawn_pacman_ai():
+        global pacman_ai
+        if pacman_ai is None:
+            try:
+                pacman_ai = PacManChaser(map_root=pacmap_root)
+                print('[PacMan] AI spawned after 3s delay')
+            except Exception as e:
+                print('[PacMan] AI spawn failed:', e)
+    # 3 second delayed spawn
+    vizact.ontimer(3.0, _spawn_pacman_ai)
 else:
     pacman_ai = None  # external launcher will create and attach
 
