@@ -25,7 +25,11 @@ ASSET_PLAYER_GLTF   = os.path.join('assets','Person.glb')
 CELL_SIZE           = 3.0  # grid cell size (must match PacManAI/KeyLoader)
 PASSABLE_EMOJIS     = {'🟨','🟪','🟦'}  # tiles player can occupy / move through
 CENTERING_STRENGTH  = 6.0  # higher pulls player faster toward cell center
-PLAYER_COLLISION_ENABLED = False  # set True to re-enable grid collisions/centering
+PLAYER_COLLISION_ENABLED = True  # enables smooth grid-based wall collisions
+
+# Collision configuration
+COLLISION_PADDING   = 0.35  # distance from wall center to keep player away
+COLLISION_SMOOTH    = True  # use smooth wall sliding instead of hard stops
 
 # Free camera testing mode (toggle with 'C')
 FREE_CAM            = False
@@ -46,6 +50,11 @@ INVERT_Y_TP         = True
 
 CAMERA_SMOOTH_TP    = False
 CAMERA_DAMPING_TP   = 14.0
+
+# Camera collision configuration (prevents camera clipping through walls)
+CAMERA_COLLISION_ENABLED = True  # enables ray-based camera collision
+CAMERA_COLLISION_RADIUS  = 0.3   # minimum distance camera keeps from walls
+CAMERA_COLLISION_SMOOTH  = 12.0  # smoothing factor for camera collision adjustment
 
 mouse_locked        = True
 
@@ -211,6 +220,161 @@ def _cell_center_world(r,c):
     cx = _grid_origin_x + c * CELL_SIZE
     cz = _grid_origin_z + grid_r * CELL_SIZE
     return (cx, cz)
+
+# -----------------------------
+# Smooth Collision System
+# -----------------------------
+def _world_to_grid_continuous(x,z):
+    """Return continuous grid coordinates (not rounded) for smoother collision."""
+    if _grid_rows == 0 or _grid_cols == 0:
+        return None
+    gx = (x - _grid_origin_x) / CELL_SIZE
+    gz = (z - _grid_origin_z) / CELL_SIZE
+    return (gx, gz)
+
+def _is_position_passable(x, z, padding=0.0):
+    """Check if a world position is passable, with optional padding from cell edges."""
+    if _grid_rows == 0 or _grid_cols == 0:
+        return True
+    
+    # Check the cell at this position
+    rc = _world_to_grid(x, z)
+    if rc is None:
+        return False
+    if not _is_passable_rc(*rc):
+        return False
+    
+    # If padding is requested, check nearby cells too
+    if padding > 0:
+        # Check cells in a small radius
+        for dx in [-padding, 0, padding]:
+            for dz in [-padding, 0, padding]:
+                if dx == 0 and dz == 0:
+                    continue
+                test_rc = _world_to_grid(x + dx, z + dz)
+                if test_rc is None:
+                    continue
+                # If test cell is different and not passable, we're too close to a wall
+                if test_rc != rc and not _is_passable_rc(*test_rc):
+                    # Check if we're actually close enough to care
+                    cc = _cell_center_world(*test_rc)
+                    if cc:
+                        wall_cx, wall_cz = cc
+                        dist_to_wall = math.hypot(x - wall_cx, z - wall_cz)
+                        if dist_to_wall < (CELL_SIZE * 0.5 + padding):
+                            return False
+    return True
+
+def _resolve_wall_collision(x, z, new_x, new_z, radius):
+    """Resolve collision with walls using smooth sliding.
+    
+    Returns the corrected (x, z) position that doesn't penetrate walls.
+    Uses a sliding approach to allow movement along walls without getting stuck.
+    """
+    if _grid_rows == 0 or _grid_cols == 0:
+        return new_x, new_z
+    
+    # Check if new position is valid
+    rc_new = _world_to_grid(new_x, new_z)
+    if rc_new is not None and _is_passable_rc(*rc_new):
+        # Additional check: ensure we're not too close to adjacent walls
+        final_x, final_z = new_x, new_z
+        
+        # Check all 4 adjacent cells for walls and push away if too close
+        current_rc = _world_to_grid(new_x, new_z)
+        if current_rc:
+            r, c = current_rc
+            cell_center = _cell_center_world(r, c)
+            if cell_center:
+                cc_x, cc_z = cell_center
+                
+                # Check adjacent cells and push player away from walls
+                for dr, dc in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+                    adj_r, adj_c = r + dr, c + dc
+                    if not _is_passable_rc(adj_r, adj_c):
+                        # This adjacent cell is a wall
+                        wall_center = _cell_center_world(adj_r, adj_c)
+                        if wall_center:
+                            wall_x, wall_z = wall_center
+                            # Distance from player to wall center
+                            dist = math.hypot(final_x - wall_x, final_z - wall_z)
+                            # Minimum safe distance (half cell + player radius)
+                            safe_dist = CELL_SIZE * 0.5 + radius
+                            if dist < safe_dist and dist > 0:
+                                # Push player away from wall
+                                push_x = (final_x - wall_x) / dist
+                                push_z = (final_z - wall_z) / dist
+                                push_amount = (safe_dist - dist)
+                                final_x += push_x * push_amount
+                                final_z += push_z * push_amount
+        
+        return final_x, final_z
+    
+    # New position is blocked - try sliding along walls
+    # Try X movement only
+    rc_x = _world_to_grid(new_x, z)
+    x_ok = rc_x is not None and _is_passable_rc(*rc_x)
+    
+    # Try Z movement only  
+    rc_z = _world_to_grid(x, new_z)
+    z_ok = rc_z is not None and _is_passable_rc(*rc_z)
+    
+    if x_ok and z_ok:
+        # Both work, pick the one with larger movement
+        if abs(new_x - x) > abs(new_z - z):
+            return new_x, z
+        else:
+            return x, new_z
+    elif x_ok:
+        return new_x, z
+    elif z_ok:
+        return x, new_z
+    else:
+        # Can't move at all, stay in place
+        return x, z
+
+def _get_camera_safe_distance(target_x, target_y, target_z, cam_x, cam_y, cam_z):
+    """Calculate safe camera distance to prevent clipping through walls.
+    
+    Uses ray-marching through the grid to find the first wall intersection.
+    Returns the safe distance factor (0.0 to 1.0) to multiply with desired distance.
+    """
+    if not CAMERA_COLLISION_ENABLED or _grid_rows == 0 or _grid_cols == 0:
+        return 1.0
+    
+    # Direction from target to camera
+    dx = cam_x - target_x
+    dy = cam_y - target_y
+    dz = cam_z - target_z
+    total_dist = math.sqrt(dx*dx + dy*dy + dz*dz)
+    
+    if total_dist < 0.01:
+        return 1.0
+    
+    # Normalize direction
+    dx /= total_dist
+    dz /= total_dist
+    
+    # March along the ray checking for walls
+    step_size = CELL_SIZE * 0.25  # Check every quarter cell
+    num_steps = int(total_dist / step_size) + 1
+    
+    for i in range(1, num_steps):
+        t = (i * step_size) / total_dist
+        if t > 1.0:
+            t = 1.0
+            
+        check_x = target_x + dx * (i * step_size)
+        check_z = target_z + dz * (i * step_size)
+        
+        rc = _world_to_grid(check_x, check_z)
+        if rc is None or not _is_passable_rc(*rc):
+            # Found a wall - return safe distance
+            safe_dist = max(0.1, (i - 1) * step_size - CAMERA_COLLISION_RADIUS)
+            return safe_dist / total_dist
+    
+    return 1.0
+
 # Allow external launcher to inject Pac-Man AI by setting EXTERNAL_PACMAN_AI env var
 if not os.environ.get('EXTERNAL_PACMAN_AI'):
     pacman_ai = None
@@ -375,8 +539,10 @@ else:
 # -----------------------------
 # Camera update (TP uses same yaw/pitch "view" as FP, just offset back)
 # -----------------------------
+_last_safe_cam_factor = 1.0  # Track last safe camera distance factor for smooth transitions
+
 def update_camera(dt):
-    global last_cam_pos, free_cam_pos
+    global last_cam_pos, free_cam_pos, _last_safe_cam_factor
     yaw_rad   = math.radians(cam_yaw)
     pitch_rad = math.radians(cam_pitch)
 
@@ -402,10 +568,35 @@ def update_camera(dt):
         else:
             # FP-like control: same yaw/pitch direction; camera is just pulled back by fixed distance
             target = [px, py + CAMERA_HEIGHT_TP, pz]
+            
+            # Calculate desired camera position
             cam_x = target[0] - dir_x * CAMERA_DISTANCE_TP
             cam_y = target[1] - dir_y * CAMERA_DISTANCE_TP
             cam_z = target[2] - dir_z * CAMERA_DISTANCE_TP
             cam_y = max(cam_y, CAMERA_MIN_HEIGHT_TP)  # keep slightly above floor
+            
+            # Apply camera collision to prevent clipping through walls
+            if CAMERA_COLLISION_ENABLED:
+                safe_factor = _get_camera_safe_distance(
+                    target[0], target[1], target[2],
+                    cam_x, cam_y, cam_z
+                )
+                # Smooth the camera distance adjustment to prevent jitter
+                if safe_factor < _last_safe_cam_factor:
+                    # Moving closer (hitting wall) - respond quickly
+                    _last_safe_cam_factor = lerp(_last_safe_cam_factor, safe_factor, min(1.0, dt * CAMERA_COLLISION_SMOOTH * 2))
+                else:
+                    # Moving farther (leaving wall) - respond smoothly
+                    _last_safe_cam_factor = lerp(_last_safe_cam_factor, safe_factor, min(1.0, dt * CAMERA_COLLISION_SMOOTH * 0.5))
+                
+                # Apply the safe distance factor
+                if _last_safe_cam_factor < 1.0:
+                    effective_dist = CAMERA_DISTANCE_TP * _last_safe_cam_factor
+                    cam_x = target[0] - dir_x * effective_dist
+                    cam_y = target[1] - dir_y * effective_dist
+                    cam_z = target[2] - dir_z * effective_dist
+                    cam_y = max(cam_y, CAMERA_MIN_HEIGHT_TP)
+            
             desired = [cam_x, cam_y, cam_z]
             look_at = [target[0] + dir_x*0.01, target[1] + dir_y*0.01, target[2] + dir_z*0.01]
 
@@ -462,22 +653,31 @@ def on_update():
             vx /= l; vz /= l
             x,y,z = player.getPosition()
             if PLAYER_COLLISION_ENABLED:
-                # Grid-based collision attempt
+                # Smooth grid-based collision with wall sliding
                 nx = x + vx*PLAYER_SPEED*dt
                 nz = z + vz*PLAYER_SPEED*dt
-                rc_full = _world_to_grid(nx,nz)
-                if rc_full is None or _is_passable_rc(*rc_full):
-                    x, z = nx, nz
-                    moved = True
+                
+                if COLLISION_SMOOTH:
+                    # Use smooth collision resolution that allows wall sliding
+                    final_x, final_z = _resolve_wall_collision(x, z, nx, nz, PLAYER_RADIUS + COLLISION_PADDING)
+                    if abs(final_x - x) > 0.001 or abs(final_z - z) > 0.001:
+                        moved = True
+                    x, z = final_x, final_z
                 else:
-                    # try X only
-                    rc_x = _world_to_grid(nx,z)
-                    if rc_x is not None and _is_passable_rc(*rc_x):
-                        x = nx; moved = True
-                    # try Z only
-                    rc_z = _world_to_grid(x,nz)
-                    if rc_z is not None and _is_passable_rc(*rc_z):
-                        z = nz; moved = True
+                    # Original hard collision logic
+                    rc_full = _world_to_grid(nx,nz)
+                    if rc_full is None or _is_passable_rc(*rc_full):
+                        x, z = nx, nz
+                        moved = True
+                    else:
+                        # try X only
+                        rc_x = _world_to_grid(nx,z)
+                        if rc_x is not None and _is_passable_rc(*rc_x):
+                            x = nx; moved = True
+                        # try Z only
+                        rc_z = _world_to_grid(x,nz)
+                        if rc_z is not None and _is_passable_rc(*rc_z):
+                            z = nz; moved = True
             else:
                 # Free movement (no grid collisions)
                 x += vx*PLAYER_SPEED*dt
@@ -485,23 +685,29 @@ def on_update():
                 moved = True
             player.setPosition([x,y,z])
 
-        # Optional centering only when collisions are enabled
-        if PLAYER_COLLISION_ENABLED:
+        # Push player away from walls when too close (prevents getting stuck)
+        if PLAYER_COLLISION_ENABLED and COLLISION_SMOOTH:
             x_cur,y_cur,z_cur = player.getPosition()
             rc = _world_to_grid(x_cur,z_cur)
             if rc is not None and _is_passable_rc(*rc):
-                cc = _cell_center_world(*rc)
-                if cc:
-                    cx, cz = cc
-                    dx = cx - x_cur
-                    dz = cz - z_cur
-                    dist = math.hypot(dx,dz)
-                    if dist > 1e-6:
-                        pull = CENTERING_STRENGTH * dt
-                        if pull > 1.0: pull = 1.0
-                        px_new = x_cur + dx * pull
-                        pz_new = z_cur + dz * pull
-                        player.setPosition([px_new,y_cur,pz_new])
+                r, c = rc
+                # Check adjacent cells for walls and push away if too close
+                for dr, dc in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+                    adj_r, adj_c = r + dr, c + dc
+                    if not _is_passable_rc(adj_r, adj_c):
+                        wall_center = _cell_center_world(adj_r, adj_c)
+                        if wall_center:
+                            wall_x, wall_z = wall_center
+                            dist = math.hypot(x_cur - wall_x, z_cur - wall_z)
+                            safe_dist = CELL_SIZE * 0.5 + PLAYER_RADIUS + COLLISION_PADDING
+                            if dist < safe_dist and dist > 0.01:
+                                # Gently push away from wall
+                                push_x = (x_cur - wall_x) / dist
+                                push_z = (z_cur - wall_z) / dist
+                                push_amount = (safe_dist - dist) * 0.15  # Gentle push to avoid jitter
+                                x_cur += push_x * push_amount
+                                z_cur += push_z * push_amount
+                                player.setPosition([x_cur, y_cur, z_cur])
 
         global player_yaw
         if not FIRST_PERSON:
