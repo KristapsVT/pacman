@@ -18,6 +18,9 @@ PACMAN_SCALE = 0.11
 PACMAN_Y = 0.35
 DOUBLE_JUMP_ENABLED = True  # allow straight 2-cell jumps (no diagonal)
 
+# Configurable jump distance (can be overridden externally)
+PACMAN_JUMP_DISTANCE = 3.0  # default jump distance in world units (= CELL_SIZE)
+
 # LOS/behavior
 SIGHT_MAX_DIST = 9999.0  # rely on walls to block
 REPATH_INTERVAL_CHASE = 0.25
@@ -39,11 +42,14 @@ def _read_grid(path):
 
 
 class PacManChaser:
-    def __init__(self, map_root=None, existing_node=None):
+    def __init__(self, map_root=None, existing_node=None, jump_distance=None):
         self.map_root = map_root
         self.grid = _read_grid(GRID_FILE) if os.path.exists(GRID_FILE) else []
         self.rows = len(self.grid)
         self.cols = max((len(r) for r in self.grid), default=0)
+        
+        # Use provided jump distance or default
+        self.jump_distance = jump_distance if jump_distance is not None else PACMAN_JUMP_DISTANCE
 
         # Map bounds and origin mapping
         if self.map_root is not None and hasattr(self.map_root, '_pacmap_center'):
@@ -78,7 +84,7 @@ class PacManChaser:
                 position=(wx, PACMAN_Y, wz),
                 parent=self.map_root,
                 base_scale=PACMAN_SCALE,
-                jump_forward=CELL_SIZE,  # start with single-cell jump
+                jump_forward=self.jump_distance,  # use configurable jump distance
                 forward_dir=(0.0, 0.0, 1.0)
             )
             if self.node is None:
