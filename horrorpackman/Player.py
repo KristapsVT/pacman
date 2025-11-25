@@ -25,11 +25,12 @@ ASSET_PLAYER_GLTF   = os.path.join('assets','Person.glb')
 CELL_SIZE           = 3.0  # grid cell size (must match PacManAI/KeyLoader)
 PASSABLE_EMOJIS     = {'🟨','🟪','🟦'}  # tiles player can occupy / move through
 CENTERING_STRENGTH  = 6.0  # higher pulls player faster toward cell center
-PLAYER_COLLISION_ENABLED = True  # enables smooth grid-based wall collisions
+PLAYER_COLLISION_ENABLED = True  # enables grid-based wall collisions
 
 # Collision configuration
 COLLISION_PADDING   = 0.35  # distance from wall center to keep player away
 COLLISION_SMOOTH    = True  # use smooth wall sliding instead of hard stops
+GENTLE_PUSH_FACTOR  = 0.15  # strength of gentle push away from walls (prevents jitter)
 
 # Free camera testing mode (toggle with 'C')
 FREE_CAM            = False
@@ -233,7 +234,10 @@ def _world_to_grid_continuous(x,z):
     return (gx, gz)
 
 def _is_position_passable(x, z, padding=0.0):
-    """Check if a world position is passable, with optional padding from cell edges."""
+    """Check if a world position is passable, with optional padding from cell edges.
+    
+    Uses 8 cardinal/diagonal directions for proper radial coverage when padding > 0.
+    """
     if _grid_rows == 0 or _grid_cols == 0:
         return True
     
@@ -244,25 +248,26 @@ def _is_position_passable(x, z, padding=0.0):
     if not _is_passable_rc(*rc):
         return False
     
-    # If padding is requested, check nearby cells too
+    # If padding is requested, check in 8 directions for walls
     if padding > 0:
-        # Check cells in a small radius
-        for dx in [-padding, 0, padding]:
-            for dz in [-padding, 0, padding]:
-                if dx == 0 and dz == 0:
-                    continue
-                test_rc = _world_to_grid(x + dx, z + dz)
-                if test_rc is None:
-                    continue
-                # If test cell is different and not passable, we're too close to a wall
-                if test_rc != rc and not _is_passable_rc(*test_rc):
-                    # Check if we're actually close enough to care
-                    cc = _cell_center_world(*test_rc)
-                    if cc:
-                        wall_cx, wall_cz = cc
-                        dist_to_wall = math.hypot(x - wall_cx, z - wall_cz)
-                        if dist_to_wall < (CELL_SIZE * 0.5 + padding):
-                            return False
+        # Check 8 directions: N, NE, E, SE, S, SW, W, NW
+        angles = [0, 45, 90, 135, 180, 225, 270, 315]
+        for angle in angles:
+            rad = math.radians(angle)
+            dx = math.cos(rad) * padding
+            dz = math.sin(rad) * padding
+            test_rc = _world_to_grid(x + dx, z + dz)
+            if test_rc is None:
+                continue
+            # If test cell is different and not passable, we're too close to a wall
+            if test_rc != rc and not _is_passable_rc(*test_rc):
+                # Check actual distance to wall center
+                cc = _cell_center_world(*test_rc)
+                if cc:
+                    wall_cx, wall_cz = cc
+                    dist_to_wall = math.hypot(x - wall_cx, z - wall_cz)
+                    if dist_to_wall < (CELL_SIZE * 0.5 + padding):
+                        return False
     return True
 
 def _resolve_wall_collision(x, z, new_x, new_z, radius):
@@ -360,12 +365,12 @@ def _get_camera_safe_distance(target_x, target_y, target_z, cam_x, cam_y, cam_z)
     num_steps = int(total_dist / step_size) + 1
     
     for i in range(1, num_steps):
-        t = (i * step_size) / total_dist
-        if t > 1.0:
-            t = 1.0
+        step_dist = i * step_size
+        if step_dist > total_dist:
+            break
             
-        check_x = target_x + dx * (i * step_size)
-        check_z = target_z + dz * (i * step_size)
+        check_x = target_x + dx * step_dist
+        check_z = target_z + dz * step_dist
         
         rc = _world_to_grid(check_x, check_z)
         if rc is None or not _is_passable_rc(*rc):
@@ -704,7 +709,7 @@ def on_update():
                                 # Gently push away from wall
                                 push_x = (x_cur - wall_x) / dist
                                 push_z = (z_cur - wall_z) / dist
-                                push_amount = (safe_dist - dist) * 0.15  # Gentle push to avoid jitter
+                                push_amount = (safe_dist - dist) * GENTLE_PUSH_FACTOR
                                 x_cur += push_x * push_amount
                                 z_cur += push_z * push_amount
                                 player.setPosition([x_cur, y_cur, z_cur])
