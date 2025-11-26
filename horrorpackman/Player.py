@@ -45,7 +45,7 @@ FREE_CAM_VERTICAL_SPEED = 12.0  # Q/E up/down
 FIRST_PERSON        = True
 CAMERA_DISTANCE_TP  = 6.5  # Increased from 5.5 to keep camera further back
 CAMERA_HEIGHT_FP    = 1.3
-CAMERA_HEIGHT_TP    = 1.3
+CAMERA_HEIGHT_TP    = 1.6
 CAMERA_MIN_HEIGHT_TP= 0.8  # Increased minimum to prevent camera from going too low
 
 PITCH_LIMIT         = 85.0

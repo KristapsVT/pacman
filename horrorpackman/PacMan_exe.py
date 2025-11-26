@@ -162,3 +162,4 @@ except Exception:
     print('[ExE] LockUnlocker module not available')
 
 print('[ExE] Startup complete. Waiting for delayed Pac-Man spawn...')
+
