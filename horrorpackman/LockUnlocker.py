@@ -17,6 +17,7 @@ multiple removal approaches (node.remove(), viz.remove(node), hide+unparent).
 """
 import time
 import math
+import os
 import viz
 import vizact
 
@@ -35,6 +36,39 @@ _map_root = None
 _pick_distance = None
 _locks_cache = []  # list of (node, color_str)
 _on_unlock_callback = None
+_unlock_sound = None  # audio object for lock unlocking
+
+
+def _load_unlock_sound():
+    """Defensively load the lock unlocking sound.
+
+    Looks for 'lock-unlocking.mp3' in local assets folder; falls back to similar names.
+    Returns audio object or None.
+    """
+    global _unlock_sound
+    if _unlock_sound is not None:
+        return _unlock_sound
+    try:
+        base = os.path.dirname(__file__)
+        path = os.path.join(base, 'assets', 'lock-unlocking.mp3')
+        if not os.path.exists(path):
+            for alt in ('lock-unlock.mp3', 'lock_unlock.mp3', 'unlock.mp3'):
+                p2 = os.path.join(base, 'assets', alt)
+                if os.path.exists(p2):
+                    path = p2
+                    break
+        try:
+            _unlock_sound = viz.addAudio(path)
+        except Exception:
+            try:
+                viz.playSound(path)
+                _unlock_sound = None
+            except Exception:
+                _unlock_sound = None
+        return _unlock_sound
+    except Exception:
+        _unlock_sound = None
+        return None
 
 
 def _iter_children(root):
@@ -222,6 +256,13 @@ def _attempt_unlock():
     if ok:
         try:
             print('[LockUnlocker] Unlocked %s lock using %s' % (req, method))
+        except Exception:
+            pass
+        # play unlock sound (defensive)
+        try:
+            snd = _load_unlock_sound()
+            if snd is not None:
+                snd.play()
         except Exception:
             pass
         # update cache

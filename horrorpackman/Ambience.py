@@ -30,21 +30,18 @@ FOG_MODE            = 'LINEAR'  # 'LINEAR' or 'EXPONENTIAL' - exponential may av
 # -----------------------------
 SOUND_ENABLED       = True      # Enable/disable ambient sound
 AMBIENT_SOUND_FILE  = _asset_path('horror-bg.mp3')  # Absolute path to ambient sound
+DEATH_SOUND_FILE    = _asset_path('crunch.mp3')     # Death/caught sound
+KEY_PICKUP_SOUND_FILE = _asset_path('key-get.mp3')   # Key pickup sound
+LOCK_UNLOCK_SOUND_FILE = _asset_path('lock-unlock.mp3')   # Lock/unlock sound
 AMBIENT_VOLUME      = 0.15      # Volume (0.0-1.0)
 AMBIENT_LOOP        = True      # Loop the ambient sound
 AMBIENT_PITCH       = 1.0       # Pitch multiplier (1.0 = normal)
-
-# Additional sound files (optional)
-FOOTSTEP_SOUND_FILE = _asset_path('footstep.wav')  # Footstep sound
-DEATH_SOUND_FILE    = _asset_path('crunch.mp3')     # Death/caught sound
-FOOTSTEP_VOLUME     = 0.2
 DEATH_VOLUME        = 0.5
 
 # -----------------------------
 # Internal state
 # -----------------------------
 _ambient_sound = None
-_footstep_sound = None
 _death_sound = None
 _fog_active = False
 _sound_active = False
@@ -152,14 +149,6 @@ def setup_sound():
             if not started:
                 print('[Ambience] No ambient audio could be started. Check assets folder.')
         
-        # Load footstep sound (for playing on movement)
-        try:
-            _footstep_sound = viz.addAudio(FOOTSTEP_SOUND_FILE)
-            _footstep_sound.volume(FOOTSTEP_VOLUME)
-            print(f'[Ambience] Footstep sound loaded: {FOOTSTEP_SOUND_FILE}')
-        except Exception as e:
-            print(f'[Ambience] Could not load footstep sound ({FOOTSTEP_SOUND_FILE}): {e}')
-        
         # Load death sound (for game over)
         try:
             _death_sound = viz.addAudio(DEATH_SOUND_FILE)
@@ -232,22 +221,28 @@ def set_fog_density(density):
             print(f'[Ambience] Failed to update fog density: {e}')
 
 
-def play_footstep():
-    """Play footstep sound effect."""
-    if _sound_active and _footstep_sound is not None:
-        try:
-            _footstep_sound.play()
-        except Exception:
-            pass
-
-
 def play_death_sound():
     """Play death/caught sound effect."""
-    if _sound_active and _death_sound is not None:
-        try:
+    global _death_sound
+    try:
+        # Lazy-load if not yet initialized (in case init() wasn't called before death)
+        if _death_sound is None:
+            if os.path.exists(DEATH_SOUND_FILE):
+                try:
+                    _death_sound = viz.addAudio(DEATH_SOUND_FILE)
+                    _death_sound.volume(DEATH_VOLUME)
+                except Exception:
+                    _death_sound = None
+        if _death_sound is not None:
             _death_sound.play()
-        except Exception:
-            pass
+        else:
+            # Fallback: fire-and-forget
+            try:
+                viz.playSound(DEATH_SOUND_FILE)
+            except Exception:
+                pass
+    except Exception:
+        pass
 
 
 def stop_ambient_sound():

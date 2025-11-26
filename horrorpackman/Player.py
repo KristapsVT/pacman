@@ -769,6 +769,12 @@ def on_update():
         pacman_ai.update(dt, (px, py, pz))
         if pacman_ai.collides_with_point((px, py, pz), radius=PLAYER_RADIUS):
             print('[PacMan] Collision: player caught!')
+            # Play death sound (defensive import)
+            try:
+                import Ambience
+                Ambience.play_death_sound()
+            except Exception:
+                pass
             # Trigger game over sequence
             try:
                 import GameOver

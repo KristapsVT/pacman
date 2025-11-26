@@ -9,6 +9,7 @@ APIs and missing KeyLoader state.
 """
 import math
 import time
+import os
 import viz
 import vizact
 
@@ -35,6 +36,39 @@ _player_flash_until = 0.0
 _player_orig_color = None
 _on_collect_callback = None
 _collected_sequence = []
+_pickup_sound = None  # audio object for key pickup
+
+
+def _load_pickup_sound():
+    """Attempt to load the key pickup sound defensively.
+
+    Returns the audio object or None. Uses local assets folder; tolerates missing file.
+    """
+    global _pickup_sound
+    if _pickup_sound is not None:
+        return _pickup_sound
+    try:
+        base = os.path.dirname(__file__)
+        path = os.path.join(base, 'assets', 'key-get.mp3')
+        if not os.path.exists(path):
+            # try alternate extensions just in case
+            for alt in ('key-get.wav', 'key_get.mp3', 'key.mp3'):
+                p2 = os.path.join(base, 'assets', alt)
+                if os.path.exists(p2):
+                    path = p2
+                    break
+        try:
+            _pickup_sound = viz.addAudio(path)
+        except Exception:
+            try:
+                viz.playSound(path)  # fire-and-forget fallback
+                _pickup_sound = None
+            except Exception:
+                _pickup_sound = None
+        return _pickup_sound
+    except Exception:
+        _pickup_sound = None
+        return None
 
 
 def _angle_diff(a):
@@ -118,6 +152,13 @@ def _attempt_pick():
         _collected_count += 1
         try:
             _collected_sequence.append(color_name)
+        except Exception:
+            pass
+        # play pickup sound (defensive)
+        try:
+            snd = _load_pickup_sound()
+            if snd is not None:
+                snd.play()
         except Exception:
             pass
         _flash_until = time.time() + 2.0
