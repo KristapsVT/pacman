@@ -652,6 +652,14 @@ def update_camera(dt):
 # Frame update
 # -----------------------------
 def on_update():
+    # Check if game over has been triggered
+    try:
+        import GameOver
+        if GameOver.is_game_over():
+            return  # Stop all updates if game over
+    except Exception:
+        pass
+    
     dt = viz.getFrameElapsed()
     hfx,hfz = update_camera(dt)
 
@@ -761,6 +769,12 @@ def on_update():
         pacman_ai.update(dt, (px, py, pz))
         if pacman_ai.collides_with_point((px, py, pz), radius=PLAYER_RADIUS):
             print('[PacMan] Collision: player caught!')
+            # Trigger game over sequence
+            try:
+                import GameOver
+                GameOver.show_game_over_and_close()
+            except Exception as e:
+                print('[Player] Failed to trigger game over:', e)
     except Exception:
         pass
 
