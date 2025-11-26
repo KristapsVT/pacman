@@ -23,6 +23,15 @@ except Exception:
 # Allow the viz runtime a short moment to initialize
 time.sleep(0.05)
 
+# Initialize ambience (fog and sound)
+try:
+    import Ambience
+    Ambience.init()
+    print('[ExE] Ambience (fog & sound) initialized')
+except Exception:
+    print('[ExE] Ambience module not available or failed:')
+    traceback.print_exc()
+
 pm_node = None
 def _delayed_spawn():
     global pm_node
@@ -56,6 +65,14 @@ try:
     from MapLoader import load_pacmap
     pacmap_root, floor_node, wall_nodes = load_pacmap(apply_style=True)
     print('[ExE] Map built, root:', pacmap_root, 'walls:', len(wall_nodes))
+    
+    # Disable fog on floor to prevent flickering/layering issues
+    if floor_node is not None:
+        try:
+            import Ambience
+            Ambience.disable_fog_on_node(floor_node)
+        except Exception:
+            print('[ExE] Could not disable fog on floor')
 except Exception:
     print('[ExE] MapLoader not available or failed:')
     traceback.print_exc()

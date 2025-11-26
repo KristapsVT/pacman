@@ -21,6 +21,13 @@ def show_game_over_and_close():
     _game_over_active = True
     print('[GameOver] Player squished by Pac-Man!')
     
+    # Play death sound if Ambience module is available
+    try:
+        import Ambience
+        Ambience.play_death_sound()
+    except Exception:
+        pass
+    
     try:
         # Create screen text using viz.addText with parent=viz.SCREEN
         _game_over_text = viz.addText('You have been squished by Pac-Man!', parent=viz.SCREEN)

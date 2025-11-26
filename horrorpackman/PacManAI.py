@@ -13,13 +13,13 @@ from PacManLoaderAndAnimations import run_pacman_animation
 GRID_FILE = os.path.normpath(os.path.join(os.path.dirname(__file__), '..', 'Map_Grid.txt'))
 CELL_SIZE = 3.0
 PACMAN_TURN_RATE = 360.0  # deg/sec for smooth facing
-PACMAN_RADIUS = 0.45
+PACMAN_RADIUS = 0.65  # Increased for more sensitive player collision
 PACMAN_SCALE = 0.11
 PACMAN_Y = 0.35
 DOUBLE_JUMP_ENABLED = True  # allow straight 2-cell jumps (no diagonal)
 
 # Configurable jump distance (can be overridden externally)
-PACMAN_JUMP_DISTANCE = 3.0  # default jump distance in world units (= CELL_SIZE)
+PACMAN_JUMP_DISTANCE = 100.0  # default jump distance in world units (= CELL_SIZE)
 
 # LOS/behavior
 SIGHT_MAX_DIST = 9999.0  # rely on walls to block
