@@ -108,7 +108,18 @@ try:
             try:
                 import Escape
                 try:
-                    Escape.init(player_node, map_root=pacmap_root, cell_size=3.0, restart_callback=getattr(game, 'restart', None))
+                    # initialize optional GameOver helper and pass its trigger as the restart callback
+                    try:
+                        import GameOver
+                        try:
+                            GameOver.init(player_node, map_root=pacmap_root)
+                        except Exception:
+                            pass
+                        restart_cb = getattr(GameOver, 'trigger_game_over', getattr(game, 'restart', None))
+                    except Exception:
+                        restart_cb = getattr(game, 'restart', None)
+
+                    Escape.init(player_node, map_root=pacmap_root, cell_size=3.0, restart_callback=restart_cb)
                     print('[ExE] Escape initialized')
                 except Exception:
                     print('[ExE] Escape.init failed')
