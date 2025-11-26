@@ -1,6 +1,6 @@
 # Pac‑Man Prototype (Vizard)
 
-A small Vizard-based Pac‑Man prototype with player movement, map loading, keys/locks, Pac‑Man AI, ambience (fog + audio), and a game-over screen when Pac‑Man catches the player.
+Vizard-based Pac‑Man with player movement, map loading, keys/locks, Pac‑Man AI, ambience.
 
 ## Quick Start
 - Prerequisite: Install WorldViz Vizard (provides the `viz`/`vizact` APIs).
