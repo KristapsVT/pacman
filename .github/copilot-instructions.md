@@ -1,3 +1,53 @@
+AI Coding Agent Instructions — pacman (concise)
+
+This repo is a small Vizard-based Pac‑Man prototype. The notes below capture the concrete, repo-specific patterns an AI coding agent should follow to be productive quickly.
+
+Big picture
+
+- Single-process runtime: `Player.py` is the main runtime that sets up the scene, input, and the single update loop driven by `vizact.ontimer(0, on_update)`.
+- `PacMan_exe.py` is a launcher that composes the map, keys, locks, and spawns Pac‑Man (it imports `Player` and schedules delayed spawn).
+- Map visuals and key placement are separate: `MapLoader.py` builds the geometry and caches `_pacmap_center`/`_pacmap_bounds`; `KeyLoader.py` reads `Map_Grid.txt` (uses `🟪` for key cells) and aligns keys to the map center.
+
+Quick run commands (PowerShell)
+
+- Run the full launcher: `python horrorpackman\PacMan_exe.py`
+- Run the core runtime directly: `python horrorpackman\Player.py`
+
+Project-specific conventions
+
+- Top-level constants live in `Player.py` (e.g. `CELL_SIZE`, `PLAYER_*`, camera constants). Change them only there — other modules assume those values.
+- Single update loop: put movement, AI, animation, and collision logic inside the `on_update()` timer (avoid per-entity timers).
+- Asset loads must be defensive: wrap `viz.addChild()` calls in `try/except` and fall back to primitives. See `load_model()` in `Player.py` and `_load_key_model()` in `KeyLoader.py`.
+- Use wrapper groups for models: create a `viz.addGroup()` wrapper, attach the raw child, then transform the wrapper. Helpers like `_center_glb_local_in_wrapper` (present in `Player.py` and `KeyLoader.py`) align pivot and bottom.
+
+Key integration points
+
+- MapLoader -> KeyLoader: `load_pacmap()` sets `group._pacmap_center` and `_pacmap_bounds`. `KeyLoader.spawn_keys_on_map()` reads those to place keys relative to the map.
+- Player grid alignment: `Player.py` reads `Map_Grid.txt` to compute `_grid_origin_x/_z` and `_world_to_grid()` for optional grid-based collision and centering. `CELL_SIZE` must match across modules.
+- External Pac-Man AI: `Player.py` honors `os.environ['EXTERNAL_PACMAN_AI']`. `PacMan_exe.py` sets this and spawns Pac‑Man visuals + AI after a delay.
+- Key collection: call `KeyCollector.init(player_node)` after `player` exists to enable keyboard pickup (`E`) and HUD/collection behavior.
+
+Common edit points
+
+- Change map assets: edit `PACMAP_PARTS` in `MapLoader.py` or place GLB files into `horrorpackman/assets/`.
+- Tweak key placement: call `spawn_keys_on_map(..., cell_size=<value>, spawn_chance=<0..1>, num_keys=<n>)` from `PacMan_exe.py` or tests.
+- Re-enable grid collisions: set `PLAYER_COLLISION_ENABLED = True` in `Player.py` and ensure `Map_Grid.txt` and `CELL_SIZE` align.
+
+Defensive patterns to follow
+
+- Accept missing `viz` APIs and missing assets; modules use fallbacks. Mirror that approach when adding features.
+- Keep visual changes localized to wrapper groups; avoid transforming model internals.
+- Avoid noisy per-frame prints; use bracketed short tags like `[Map]`, `[Key]`, `[ExE]` for logging.
+
+Files to inspect for examples
+
+- `Player.py` — main runtime, camera math, input, constants.
+- `PacMan_exe.py` — launcher orchestration and delayed spawn pattern.
+- `MapLoader.py` — map part loading, fallback primitives, `_pacmap_center` caching.
+- `KeyLoader.py` — grid parsing, farthest-point sampling for key spread, key model loading.
+- `KeyCollector.py` — pickup logic and safe node removal (use as reference for safe viz node handling).
+
+If something is unclear or you want a focused patch (e.g., re-enable collisions, add ghost spawn, or change key spawn behavior), say which file and I will prepare a small, focused change.
 """
 AI Coding Agent Instructions — pacman (concise)
 

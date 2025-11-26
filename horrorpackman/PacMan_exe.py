@@ -104,9 +104,30 @@ try:
     try:
         player_node = getattr(game, 'player', None)
         if player_node is not None:
+            # Initialize Escape integration (spawn escape pad)
+            try:
+                import Escape
+                try:
+                    Escape.init(player_node, map_root=pacmap_root, cell_size=3.0, restart_callback=getattr(game, 'restart', None))
+                    print('[ExE] Escape initialized')
+                except Exception:
+                    print('[ExE] Escape.init failed')
+            except Exception:
+                # Escape module optional
+                pass
+
             def _on_unlock(color, node):
                 try:
                     print('[ExE] Lock unlocked:', color, 'node=', node)
+                except Exception:
+                    pass
+                try:
+                    # notify Escape module if available
+                    if 'Escape' in globals():
+                        try:
+                            Escape.on_unlock(color, node)
+                        except Exception:
+                            pass
                 except Exception:
                     pass
 
