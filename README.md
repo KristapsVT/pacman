@@ -14,7 +14,6 @@ Vizard-based Pac‑Man with player movement, map loading, keys/locks, Pac‑Man 
 - Quit: `Esc`
 - Toggle mouse lock: `Tab`
 - Toggle First/Third person: `F`
-- Free cam toggle: `C` (then `W/A/S/D`, `Q/E` up/down)
 
 ## Project Structure
 - `horrorpackman/Player.py`: Main runtime (camera, input, single update loop).
@@ -48,7 +47,7 @@ Vizard-based Pac‑Man with player movement, map loading, keys/locks, Pac‑Man 
 ## Pac‑Man AI
 - Spawns after a short delay in `PacMan_exe.py`.
 - Uses grid from `Map_Grid.txt` and the cached map center/bounds.
-- Collision sensitivity can be adjusted via radii in `PacManAI.py` and `Player.py`.
+- Collision sensitivity can be adjusted via radius in `PacManAI.py` and `Player.py`.
 
 ## Keys & Locks
 - Keys are spawned on 🟪 cells from `Map_Grid.txt` using `KeyLoader.spawn_keys_on_map(...)`.
