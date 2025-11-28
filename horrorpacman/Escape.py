@@ -311,7 +311,7 @@ def init(player, map_root=None, cell_size=3.0, restart_callback=None):
 
 
 def _try_activate():
-    global _unlocked, _node, _player, _restart_cb
+    global _unlocked, _node, _player, _restart_cb, _map_root
     if not _unlocked or _node is None or _player is None:
         return False
     try:
@@ -332,13 +332,78 @@ def _try_activate():
     dx = px - ex
     dz = pz - ez
     if (dx*dx + dz*dz) <= (thresh * thresh):
-        # call restart callback if provided
+        # Instead of restarting, teleport the player to fixed coordinates (0, -150, 0)
+        # and spawn `Game_Over.glb` at (20, -150, 0). Also orient player to +X (yaw=90)
         try:
-            if _restart_cb is not None:
-                _restart_cb()
-                return True
+            # Teleport player to (x=0, y=-150, z=0)
+            try:
+                _player.setPosition((0.0, -150.0, 0.0))
+            except Exception:
+                try:
+                    _player.setPosition(0.0, -150.0, 0.0)
+                except Exception:
+                    pass
+
+            # Spawn Game_Over model at (25, -148, 4)
+            try:
+                game_node = _load_escape_model('Game_Over.glb', scale_factor=1.0, tint=None, fallback_color=(0.0,0.0,0.0), desired_bottom=0.0, desired_size=_cell_size * 0.9)
+                if game_node is not None:
+                    try:
+                        if _map_root is not None:
+                            game_node.setParent(_map_root)
+                        else:
+                            game_node.setParent(viz.addGroup())
+                    except Exception:
+                        pass
+                    try:
+                        game_node.setPosition((25.0, -148.0, 4.0))
+                    except Exception:
+                        pass
+                    try:
+                        game_node.disable(viz.LIGHTING)
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+
+            # Orient player to face +X (yaw = 90 degrees) and lock controls
+            try:
+                try:
+                    import Player as _P
+                    yaw_target = 90.0
+                    try:
+                        _P.cam_yaw = yaw_target
+                    except Exception:
+                        pass
+                    try:
+                        _P.player_yaw = yaw_target
+                    except Exception:
+                        pass
+                except Exception:
+                    yaw_target = 90.0
+                try:
+                    _player.setEuler([yaw_target, 0, 0])
+                except Exception:
+                    pass
+                try:
+                    import Player as _P2
+                    try:
+                        # lock controls and ensure camera pitch is horizontal
+                        _P2.CONTROLS_LOCKED = True
+                    except Exception:
+                        pass
+                    try:
+                        _P2.cam_pitch = 0.0
+                    except Exception:
+                        pass
+                except Exception:
+                    pass
+            except Exception:
+                pass
+
+            return True
         except Exception:
-            pass
+            return False
     return False
 
 
