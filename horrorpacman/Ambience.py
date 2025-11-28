@@ -20,7 +20,7 @@ def _asset_path(name):
 # -----------------------------
 FOG_ENABLED         = True      # Enable/disable fog effect
 FOG_START           = 6.0       # Distance where fog starts (units) - clear near player
-FOG_END             = 25.0      # Distance where fog is fully opaque (units) - covers far map
+FOG_END             = 35.0      # Distance where fog is fully opaque (units) - covers far map
 FOG_DENSITY         = 0.15      # Fog density (0.0-1.0, only used for exponential fog)
 FOG_COLOR           = [0.0, 0.0, 0.0]  # Fog color - must match viz.clearcolor exactly
 FOG_MODE            = 'LINEAR'  # 'LINEAR' or 'EXPONENTIAL' - exponential may avoid floor issues
