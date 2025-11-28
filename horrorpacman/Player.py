@@ -50,6 +50,8 @@ CAMERA_SMOOTH_TP    = False
 CAMERA_DAMPING_TP   = 14.0
 
 mouse_locked        = True
+CONTROLS_LOCKED     = False  # When True, ignore movement/camera input and force FP
+_END_LOCKED         = False  # Internal flag set on game over to hard-freeze
 
 # Facing behavior for TP (disabled - now uses FP-style movement)
 FACE_STRAFE_ONLY    = False    # False = player faces camera direction like FP
@@ -459,12 +461,16 @@ vizact.onkeydown(viz.KEY_ESCAPE, lambda: viz.quit())
 
 def toggle_mouse():
     global mouse_locked
+    if CONTROLS_LOCKED or _END_LOCKED:
+        return
     mouse_locked = not mouse_locked
     apply_mouse_lock()
 vizact.onkeydown(viz.KEY_TAB, toggle_mouse)
 
 def toggle_perspective():
     global FIRST_PERSON,last_cam_pos
+    if CONTROLS_LOCKED or _END_LOCKED:
+        return
     FIRST_PERSON = not FIRST_PERSON
     print('[Camera] FIRST_PERSON:', FIRST_PERSON, '| InvertY FP:', INVERT_Y_FP, '| InvertY TP:', INVERT_Y_TP)
     last_cam_pos = None
@@ -480,6 +486,8 @@ except Exception:
     _kl_point_to_closest_key = None
 
 def point_to_closest_key_handler():
+    if CONTROLS_LOCKED or _END_LOCKED:
+        return
     if _kl_point_to_closest_key is None:
         print('[Key] KeyLoader not available')
         return
@@ -516,7 +524,8 @@ def _effective_invert_y():
     return INVERT_Y_FP if FIRST_PERSON else INVERT_Y_TP
 
 def _on_mouse_move(e):
-    if not mouse_locked: return
+    if not mouse_locked or CONTROLS_LOCKED or _END_LOCKED:
+        return
     dx = getattr(e,'dx',0.0); dy = getattr(e,'dy',0.0)
     if dx == 0.0 and dy == 0.0: return
     global cam_yaw, cam_pitch
@@ -621,15 +630,36 @@ def update_camera(dt):
 # Frame update
 # -----------------------------
 def on_update():
-    # Check if game over has been triggered
+    # Check if game over has been triggered; lock controls and force FP
     try:
         import GameOver
         if GameOver.is_game_over():
-            return  # Stop all updates if game over
+            global _END_LOCKED, CONTROLS_LOCKED, FIRST_PERSON
+            _END_LOCKED = True
+            CONTROLS_LOCKED = True
+            if not FIRST_PERSON:
+                FIRST_PERSON = True
+                try:
+                    player.visible(False)
+                except Exception:
+                    pass
+            return  # Freeze updates when game ends
     except Exception:
         pass
     
     dt = viz.getFrameElapsed()
+    # If controls are locked (escape/ending), force FP before camera update and freeze
+    if CONTROLS_LOCKED or _END_LOCKED:
+        try:
+            if not FIRST_PERSON:
+                FIRST_PERSON = True
+                player.visible(False)
+        except Exception:
+            pass
+        update_camera(dt)
+        return
+
+    # Always keep camera aligned when not locked
     hfx,hfz = update_camera(dt)
 
     # Player movement (horizontal only)
