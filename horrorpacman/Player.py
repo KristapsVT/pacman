@@ -34,14 +34,6 @@ COLLISION_RAYS      = 3    # 3=good balance, 1=fastest but less smooth corners
 CAMERA_COLLISION_ENABLED = True  # prevent camera from going through walls
 COLLISION_SIMPLE_MODE = False  # True = only 1 ray (ultra fast), False = 2-3 rays
 
-# Debug: Set to True to disable collision temporarily (press 'V' to toggle at runtime)
-DEBUG_DISABLE_COLLISION = False
-
-# Free camera testing mode (toggle with 'C')
-FREE_CAM            = False
-FREE_CAM_SPEED      = 18.0  # movement speed for free cam
-FREE_CAM_VERTICAL_SPEED = 12.0  # Q/E up/down
-
 FIRST_PERSON        = True
 CAMERA_DISTANCE_TP  = 6.5  # Increased from 5.5 to keep camera further back
 CAMERA_HEIGHT_FP    = 1.3
@@ -243,7 +235,7 @@ def check_collision_raycast(from_pos, to_pos, check_height=1.0):
     Returns: (collided, safe_pos) - safe_pos is the furthest safe position along the path.
     OPTIMIZED: Uses only 2-3 raycasts instead of 24 for 10x+ performance improvement.
     """
-    if not USE_RAYCAST_COLLISION or DEBUG_DISABLE_COLLISION:
+    if not USE_RAYCAST_COLLISION:
         return False, to_pos
     
     fx, fy, fz = from_pos
@@ -455,17 +447,13 @@ else:
 # Input
 # -----------------------------
 keys = {'w':False,'a':False,'s':False,'d':False}
-# Extra keys used only in free cam (Q/E vertical)
-keys.update({'q':False,'e':False})
 def set_key(k,s): keys[k]=s
 for k in ['w','a','s','d']:
     vizact.onkeydown(k,lambda kk=k:set_key(kk,True))
     vizact.onkeyup(k,lambda kk=k:set_key(kk,False))
 
 # Bind vertical free cam keys
-for k in ['q','e']:
-    vizact.onkeydown(k,lambda kk=k:set_key(kk,True))
-    vizact.onkeyup(k,lambda kk=k:set_key(kk,False))
+# (Removed Q/E bindings used for free camera vertical movement)
 
 vizact.onkeydown(viz.KEY_ESCAPE, lambda: viz.quit())
 
@@ -483,17 +471,7 @@ def toggle_perspective():
     player.visible(False if FIRST_PERSON else True)
 vizact.onkeydown('f', toggle_perspective)
 
-free_cam_pos = [0.0, 1.6, 0.0]  # initialized later when toggled on
-def toggle_free_cam():
-    global FREE_CAM, free_cam_pos
-    FREE_CAM = not FREE_CAM
-    if FREE_CAM:
-        free_cam_pos = viz.MainView.getPosition()[:]
-        print('[Camera] Free cam ENABLED')
-    else:
-        print('[Camera] Free cam DISABLED (returning to player camera)')
-    apply_mouse_lock()
-vizact.onkeydown('c', toggle_free_cam)
+# (Removed free camera toggle and state)
 
 # Use KeyLoader's helper to point to the nearest key (keeps logic centralized)
 try:
@@ -525,11 +503,7 @@ def point_to_closest_key_handler():
 
 vizact.onkeydown('k', lambda: point_to_closest_key_handler())
 
-def toggle_collision_debug():
-    global DEBUG_DISABLE_COLLISION
-    DEBUG_DISABLE_COLLISION = not DEBUG_DISABLE_COLLISION
-    print('[Debug] Collision', 'DISABLED' if DEBUG_DISABLE_COLLISION else 'ENABLED')
-vizact.onkeydown('v', toggle_collision_debug)
+# (Removed collision disable toggle bound to 'V')
 
 # -----------------------------
 # Camera state + mouse callback (unified FP-like control for both FP & TP)
@@ -598,7 +572,7 @@ else:
 # Camera update (TP uses same yaw/pitch "view" as FP, just offset back)
 # -----------------------------
 def update_camera(dt):
-    global last_cam_pos, free_cam_pos
+    global last_cam_pos
     yaw_rad   = math.radians(cam_yaw)
     pitch_rad = math.radians(cam_pitch)
 
@@ -611,29 +585,24 @@ def update_camera(dt):
     hfx = math.sin(yaw_rad)
     hfz = math.cos(yaw_rad)
 
-    if FREE_CAM:
-        # Free camera: position independent of player, treat like FP without player reference
-        desired = free_cam_pos[:]
-        look_at = [desired[0] + dir_x*3.0, desired[1] + dir_y*3.0, desired[2] + dir_z*3.0]
+    px,py,pz = player.getPosition()
+    if FIRST_PERSON:
+        target = [px, py + CAMERA_HEIGHT_FP, pz]
+        desired = target[:]  # camera at eye
+        look_at = [target[0] + dir_x*3.0, target[1] + dir_y*3.0, target[2] + dir_z*3.0]
     else:
-        px,py,pz = player.getPosition()
-        if FIRST_PERSON:
-            target = [px, py + CAMERA_HEIGHT_FP, pz]
-            desired = target[:]  # camera at eye
-            look_at = [target[0] + dir_x*3.0, target[1] + dir_y*3.0, target[2] + dir_z*3.0]
-        else:
-            # FP-like control: same yaw/pitch direction; camera is just pulled back by fixed distance
-            target = [px, py + CAMERA_HEIGHT_TP, pz]
-            cam_x = target[0] - dir_x * CAMERA_DISTANCE_TP
-            cam_y = target[1] - dir_y * CAMERA_DISTANCE_TP
-            cam_z = target[2] - dir_z * CAMERA_DISTANCE_TP
-            cam_y = max(cam_y, CAMERA_MIN_HEIGHT_TP)  # keep slightly above floor
-            
-            # Apply camera collision to prevent going through walls
-            raw_cam_pos = [cam_x, cam_y, cam_z]
-            desired = check_camera_collision(raw_cam_pos, target)
-            
-            look_at = [target[0] + dir_x*0.01, target[1] + dir_y*0.01, target[2] + dir_z*0.01]
+        # FP-like control: same yaw/pitch direction; camera is just pulled back by fixed distance
+        target = [px, py + CAMERA_HEIGHT_TP, pz]
+        cam_x = target[0] - dir_x * CAMERA_DISTANCE_TP
+        cam_y = target[1] - dir_y * CAMERA_DISTANCE_TP
+        cam_z = target[2] - dir_z * CAMERA_DISTANCE_TP
+        cam_y = max(cam_y, CAMERA_MIN_HEIGHT_TP)  # keep slightly above floor
+
+        # Apply camera collision to prevent going through walls
+        raw_cam_pos = [cam_x, cam_y, cam_z]
+        desired = check_camera_collision(raw_cam_pos, target)
+
+        look_at = [target[0] + dir_x*0.01, target[1] + dir_y*0.01, target[2] + dir_z*0.01]
 
     if last_cam_pos is None:
         last_cam_pos = desired[:]
@@ -663,75 +632,57 @@ def on_update():
     dt = viz.getFrameElapsed()
     hfx,hfz = update_camera(dt)
 
-    if FREE_CAM:
-        # Free camera movement (WASD horizontal, Q/E vertical)
-        right_x = hfz
-        right_z = -hfx
-        mx = (1 if keys['d'] else 0) - (1 if keys['a'] else 0)
-        mz = (1 if keys['w'] else 0) - (1 if keys['s'] else 0)
-        vy = (1 if keys['e'] else 0) - (1 if keys['q'] else 0)
-        if mx or mz or vy:
-            vx = right_x*mx + hfx*mz
-            vz = right_z*mx + hfz*mz
-            l = math.hypot(vx,vz) or 1.0
-            if mx or mz:
-                vx /= l; vz /= l
-            speed = FREE_CAM_SPEED
-            free_cam_pos[0] += vx*speed*dt
-            free_cam_pos[2] += vz*speed*dt
-            free_cam_pos[1] += vy*FREE_CAM_VERTICAL_SPEED*dt
-    else:
-        # Player movement (horizontal only)
-        right_x = hfz
-        right_z = -hfx
+    # Player movement (horizontal only)
+    right_x = hfz
+    right_z = -hfx
 
-        mx = (1 if keys['d'] else 0) - (1 if keys['a'] else 0)
-        mz = (1 if keys['w'] else 0) - (1 if keys['s'] else 0)
+    mx = (1 if keys['d'] else 0) - (1 if keys['a'] else 0)
+    mz = (1 if keys['w'] else 0) - (1 if keys['s'] else 0)
 
-        moved = False
-        if mx or mz:
-            vx = right_x*mx + hfx*mz
-            vz = right_z*mx + hfz*mz
-            l = math.hypot(vx,vz) or 1.0
-            vx /= l; vz /= l
-            x,y,z = player.getPosition()
-            
-            # Calculate desired new position
-            desired_x = x + vx*PLAYER_SPEED*dt
-            desired_z = z + vz*PLAYER_SPEED*dt
-            desired_pos = [desired_x, y, desired_z]
-            
-            if USE_RAYCAST_COLLISION and not DEBUG_DISABLE_COLLISION:
-                # Use raycast collision with sliding
-                from_pos = [x, y, z]
-                final_pos = slide_collision(from_pos, desired_pos, check_height=CAMERA_HEIGHT_FP)
-                # Only update if actually moved
-                if abs(final_pos[0] - x) > 1e-6 or abs(final_pos[2] - z) > 1e-6:
-                    player.setPosition(final_pos)
-                    moved = True
-            elif PLAYER_COLLISION_ENABLED:
-                # Grid-based collision attempt (legacy)
-                nx = desired_x
-                nz = desired_z
-                rc_full = _world_to_grid(nx,nz)
-                if rc_full is None or _is_passable_rc(*rc_full):
-                    player.setPosition([nx, y, nz])
-                    moved = True
-                else:
-                    # try X only
-                    rc_x = _world_to_grid(nx,z)
-                    if rc_x is not None and _is_passable_rc(*rc_x):
-                        player.setPosition([nx, y, z])
-                        moved = True
-                    # try Z only
-                    rc_z = _world_to_grid(x,nz)
-                    if rc_z is not None and _is_passable_rc(*rc_z):
-                        player.setPosition([x, y, nz])
-                        moved = True
-            else:
-                # Free movement (no collisions)
-                player.setPosition([desired_x, y, desired_z])
+    moved = False
+    if mx or mz:
+        vx = right_x*mx + hfx*mz
+        vz = right_z*mx + hfz*mz
+        l = math.hypot(vx,vz) or 1.0
+        vx /= l; vz /= l
+        x,y,z = player.getPosition()
+
+        # Calculate desired new position
+        desired_x = x + vx*PLAYER_SPEED*dt
+        desired_z = z + vz*PLAYER_SPEED*dt
+        desired_pos = [desired_x, y, desired_z]
+
+        if USE_RAYCAST_COLLISION:
+            # Use raycast collision with sliding
+            from_pos = [x, y, z]
+            final_pos = slide_collision(from_pos, desired_pos, check_height=CAMERA_HEIGHT_FP)
+            # Only update if actually moved
+            if abs(final_pos[0] - x) > 1e-6 or abs(final_pos[2] - z) > 1e-6:
+                player.setPosition(final_pos)
                 moved = True
+        elif PLAYER_COLLISION_ENABLED:
+            # Grid-based collision attempt (legacy)
+            nx = desired_x
+            nz = desired_z
+            rc_full = _world_to_grid(nx,nz)
+            if rc_full is None or _is_passable_rc(*rc_full):
+                player.setPosition([nx, y, nz])
+                moved = True
+            else:
+                # try X only
+                rc_x = _world_to_grid(nx,z)
+                if rc_x is not None and _is_passable_rc(*rc_x):
+                    player.setPosition([nx, y, z])
+                    moved = True
+                # try Z only
+                rc_z = _world_to_grid(x,nz)
+                if rc_z is not None and _is_passable_rc(*rc_z):
+                    player.setPosition([x, y, nz])
+                    moved = True
+        else:
+            # Free movement (no collisions)
+            player.setPosition([desired_x, y, desired_z])
+            moved = True
 
         # Optional centering only when collisions are enabled
         if PLAYER_COLLISION_ENABLED:
@@ -763,7 +714,7 @@ def on_update():
                 player.setEuler([player_yaw, 0, 0])
 
     # Update Pac-Man chaser AI
-    # Update Pac-Man chaser AI (still based on player position, even in free cam)
+    # Update Pac-Man chaser AI
     try:
         px, py, pz = player.getPosition()
         pacman_ai.update(dt, (px, py, pz))
@@ -794,5 +745,4 @@ print('  Move: W A S D')
 print('  Quit:    Esc')
 print('  Mouse lock ON/OFF: Tab')
 print('  FP/TP toggle: F (InvertY FP:', INVERT_Y_FP, ', InvertY TP:', INVERT_Y_TP, ')')
-print('  Free Cam toggle: C (WASD move, Q/E vertical)')
 print('Assets:', ASSET_PLAYER_GLTF)
