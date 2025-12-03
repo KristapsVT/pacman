@@ -73,7 +73,6 @@ def _load_escape_model(filename, scale_factor=1.0, tint=None, fallback_color=(0.
         except Exception as e:
             print('[Escape] Model load error for', asset_path, ':', e)
 
-    # fallback primitive
     g = viz.addGroup()
     try:
         node = vizshape.addBox([1.0, 0.2, 1.0])
@@ -100,7 +99,6 @@ def _load_escape_model(filename, scale_factor=1.0, tint=None, fallback_color=(0.
     return g
 
 
-# Module state
 _node = None
 _map_root = None
 _player = None
@@ -109,14 +107,9 @@ _unlocked = False
 _locks_total = None
 _locks_remaining = None
 _restart_cb = None
-# spawn offset (ox, oy, oz) applied to mid position when placing the escape model
-# default visual spawn offset (applied only to the visual node)
 _spawn_offset = (4.0, 0.1, -2.7)
 _sank = False
 _black_override_applied = False
-# logical activation position (the mid point between the two 🟩 cells)
-# This is where the player must stand and press 'L' to trigger reset — it should NOT
-# be affected by `_spawn_offset`.
 _activation_pos = None
 
 
@@ -125,7 +118,6 @@ def _count_locks(map_root):
         return 0
     count = 0
     try:
-        # walk children defensively
         stack = [map_root]
         while stack:
             n = stack.pop()
@@ -151,7 +143,6 @@ def spawn_escape(map_root=None, attach_to_map=True, grid_path=None, cell_size=3.
     _map_root = map_root
     _cell_size = float(cell_size or 3.0)
     global _spawn_offset
-    # offset precedence: explicit arg > env vars > module default
     if spawn_offset is not None:
         try:
             ox, oy, oz = float(spawn_offset[0]), float(spawn_offset[1]), float(spawn_offset[2])
@@ -159,7 +150,6 @@ def spawn_escape(map_root=None, attach_to_map=True, grid_path=None, cell_size=3.
         except Exception:
             pass
     else:
-        # try environment vars: ESCAPE_OFFSET_X/Y/Z
         try:
             ox = float(os.environ.get('ESCAPE_OFFSET_X', _spawn_offset[0]))
             oy = float(os.environ.get('ESCAPE_OFFSET_Y', _spawn_offset[1]))
@@ -180,7 +170,6 @@ def spawn_escape(map_root=None, attach_to_map=True, grid_path=None, cell_size=3.
     rows = len(grid)
     cols = max(len(r) for r in grid)
 
-    # find a column c where two vertically adjacent rows contain LOCK_CELL
     found = None
     for r in range(rows - 1):
         for c in range(cols):
@@ -198,7 +187,6 @@ def spawn_escape(map_root=None, attach_to_map=True, grid_path=None, cell_size=3.
 
     r_top, r_bottom, c = found
 
-    # determine map center same as KeyLoader/LockLoader
     if map_root is not None and hasattr(map_root, '_pacmap_center'):
         center_x, center_z = map_root._pacmap_center
     else:
@@ -216,7 +204,6 @@ def spawn_escape(map_root=None, attach_to_map=True, grid_path=None, cell_size=3.
         origin_z = center_z - (grid_depth / 2.0) + (_cell_size / 2.0)
         use_local = False
 
-    # compute world/local positions (y KEY_Y ~ 0)
     grid_r_top = (rows - 1 - r_top)
     grid_r_bot = (rows - 1 - r_bottom)
     if use_local:
@@ -230,7 +217,6 @@ def spawn_escape(map_root=None, attach_to_map=True, grid_path=None, cell_size=3.
            (top_pos[1] + bot_pos[1]) * 0.5,
            (top_pos[2] + bot_pos[2]) * 0.5]
 
-    # spawn model centered at mid; request desired_size ~ cell_size * 0.9
     desired_size = _cell_size * 0.9
     node = _load_escape_model('Escape.glb', scale_factor=1.0, tint=None, fallback_color=(0.8,0.8,0.8), desired_bottom=0.0, desired_size=desired_size)
     try:
@@ -241,12 +227,9 @@ def spawn_escape(map_root=None, attach_to_map=True, grid_path=None, cell_size=3.
     except Exception:
         pass
     try:
-        # store logical activation position (mid) — this is where the player must stand
-        # to press 'L'. Do NOT apply spawn offset to this activation point.
         global _activation_pos
         _activation_pos = tuple(mid)
 
-        # apply spawn offset only to the visual model position
         ox, oy, oz = _spawn_offset
         spawn_pos = (mid[0] + ox, mid[1] + oy, mid[2] + oz)
         node.setPosition(spawn_pos)
@@ -270,7 +253,6 @@ def spawn_escape(map_root=None, attach_to_map=True, grid_path=None, cell_size=3.
         pass
 
     _node = node
-    # initial lock counts
     try:
         global _locks_total, _locks_remaining
         _locks_total = _count_locks(map_root)
