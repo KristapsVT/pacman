@@ -1,9 +1,3 @@
-﻿# First/Third-person movement + rotation with unified FP-like camera control in TP
-# - TP camera uses the same yaw/pitch control as FP (mouse deltas)
-# - Pac-Man removed from the scene (no model, no animation, no updates)
-# - Shadows and arena borders previously removed
-# Controls: W/A/S/D move player, R restart, Esc quit, Tab toggle mouse lock, F toggle FP/TP
-
 import viz
 import vizact
 import vizshape
@@ -14,31 +8,27 @@ from MapLoader import build_and_attach_map
 from PacManAI import PacManChaser
 import codecs
 
-# -----------------------------
-# Config
-# -----------------------------
 PLAYER_SPEED        = 6.0
 PLAYER_RADIUS       = 0.22
 PLAYER_MODEL_SCALE  = 0.35
-PLAYER_Y_OFFSET     = 0 # raised from 0.35 to prevent feet clipping through floor
+PLAYER_Y_OFFSET     = 0 
 ASSET_PLAYER_GLTF   = os.path.join('assets','Person.glb')
-CELL_SIZE           = 3.0  # grid cell size (must match PacManAI/KeyLoader)
-PASSABLE_EMOJIS     = {'🟨','🟪','🟦'}  # tiles player can occupy / move through
-CENTERING_STRENGTH  = 6.0  # higher pulls player faster toward cell center
-PLAYER_COLLISION_ENABLED = False  # set True to re-enable grid collisions/centering
+CELL_SIZE           = 3.0  
+PASSABLE_EMOJIS     = {'🟨','🟪','🟦'}  
+CENTERING_STRENGTH  = 6.0  
+PLAYER_COLLISION_ENABLED = False  
 
-# Raycast-based collision (smooth, no glitching)
-USE_RAYCAST_COLLISION = True  # raycast-based wall collision (recommended)
-COLLISION_BUFFER    = 0.3  # distance from walls (reduced to prevent weird pushing)
-COLLISION_RAYS      = 3    # 3=good balance, 1=fastest but less smooth corners
-CAMERA_COLLISION_ENABLED = True  # prevent camera from going through walls
-COLLISION_SIMPLE_MODE = False  # True = only 1 ray (ultra fast), False = 2-3 rays
+USE_RAYCAST_COLLISION = True  
+COLLISION_BUFFER    = 0.3  
+COLLISION_RAYS      = 3   
+CAMERA_COLLISION_ENABLED = True  
+COLLISION_SIMPLE_MODE = False  
 
 FIRST_PERSON        = True
-CAMERA_DISTANCE_TP  = 4.5  # Increased from 5.5 to keep camera further back
+CAMERA_DISTANCE_TP  = 4.5 
 CAMERA_HEIGHT_FP    = 1.3
 CAMERA_HEIGHT_TP    = 1.6
-CAMERA_MIN_HEIGHT_TP= 0.8  # Increased minimum to prevent camera from going too low
+CAMERA_MIN_HEIGHT_TP= 0.8 
 
 PITCH_LIMIT         = 85.0
 MOUSE_SENS_DEG      = 0.15
@@ -50,24 +40,18 @@ CAMERA_SMOOTH_TP    = False
 CAMERA_DAMPING_TP   = 14.0
 
 mouse_locked        = True
-CONTROLS_LOCKED     = False  # When True, ignore movement/camera input and force FP
-_END_LOCKED         = False  # Internal flag set on game over to hard-freeze
+CONTROLS_LOCKED     = False 
+_END_LOCKED         = False 
 
-# Facing behavior for TP (disabled - now uses FP-style movement)
-FACE_STRAFE_ONLY    = False    # False = player faces camera direction like FP
+FACE_STRAFE_ONLY    = False    
 STRAFE_FACE_OFFSET  = 90.0
 
-# Smooth movement in third person (disabled - now matches FP exactly)
-PLAYER_ROTATION_SMOOTH = False  # False = instant rotation like FP
-PLAYER_ROTATION_SPEED = 12.0   # rotation speed (not used when smooth=False)
-PLAYER_ACCEL_TIME = 0.15       # time to reach full speed (not used)
+PLAYER_ROTATION_SMOOTH = False 
+PLAYER_ROTATION_SPEED = 12.0   
+PLAYER_ACCEL_TIME = 0.15       
 
-# Pac-Man AI Configuration
-PACMAN_JUMP_DISTANCE = 3.0  # Pac-Man jump distance in units (default CELL_SIZE)
+PACMAN_JUMP_DISTANCE = 3.0  
 
-# -----------------------------
-# Helpers
-# -----------------------------
 def clamp(v,a,b): return max(a,min(v,b))
 def lerp(a,b,t): return a + (b-a)*t
 
@@ -79,7 +63,6 @@ def _get_sphere_center(raw):
         return None
 
 def _center_glb_local_in_wrapper(raw):
-    """Center raw model inside a wrapper so wrapper origin is near the visual center (XZ), bottom aligned."""
     try:
         minX,minY,minZ,maxX,maxY,maxZ = raw.getBoundingBox()
         cx = (minX+maxX)*0.5
@@ -92,11 +75,11 @@ def _center_glb_local_in_wrapper(raw):
             cz = cz*(1-a)+sz*a
         desiredBottom = 1.75
         liftY = desiredBottom - minY
-        # Shift player to the right by adjusting X offset
-        x_offset = cx - 0.5  # Added -0.5 to shift right
+       
+        x_offset = cx - 0.5 
         raw.setPosition([x_offset,liftY,-cz])
     except:
-        raw.setPosition([-0.5,1.75,0])  # Also shift fallback position right
+        raw.setPosition([-0.5,1.75,0]) 
 
 
 def load_model(asset_path, scale, tint=None, fallback_color=(0.9,0.85,0.15)):
@@ -116,7 +99,7 @@ def load_model(asset_path, scale, tint=None, fallback_color=(0.9,0.85,0.15)):
             return wrapper
         except Exception as e:
             print('[Model] Load error for', asset_path, ':', e)
-    # fallback primitive if asset not found or failed to load
+ 
     print('[Model] Not found, using primitive ->', asset_path)
     g = viz.addGroup()
     head = vizshape.addSphere(radius=PLAYER_RADIUS,slices=24,stacks=18)
@@ -138,17 +121,12 @@ def load_model(asset_path, scale, tint=None, fallback_color=(0.9,0.85,0.15)):
             g.color(*tint)
         except:
             pass
-    return g
-
-# -----------------------------
-# Init
-# -----------------------------
+    return 
 viz.setMultiSample(4)
 
 try: from window_utils import _maximize_window; _maximize_window()
 except Exception: _maximize_window = lambda: None
 
-# Launch the viz runtime (fullscreen preference requested above)
 viz.go()
 viz.clearcolor(0.10,0.10,0.14)
 viz.mouse.setOverride(viz.ON)
@@ -162,23 +140,13 @@ def apply_mouse_lock():
         viz.mouse.setVisible(True)
 apply_mouse_lock()
 
-# -----------------------------
-# Player
-# -----------------------------
 player = load_model(ASSET_PLAYER_GLTF, PLAYER_MODEL_SCALE)
 player.setPosition([0,PLAYER_Y_OFFSET,0])
 player_yaw = 0.0
-player_target_yaw = 0.0  # target yaw for smooth rotation
-player_velocity = 0.0    # current velocity for smooth acceleration
+player_target_yaw = 0.0 
+player_velocity = 0.0   
 player.visible(False if FIRST_PERSON else True)
-
-# -----------------------------
-# Map + Pac-Man chaser
-# -----------------------------
 pacmap_root = build_and_attach_map()
-# -----------------------------
-# Grid load (Map_Grid.txt) for collision/path restriction
-# -----------------------------
 _grid = []
 _grid_rows = 0
 _grid_cols = 0
@@ -232,21 +200,14 @@ def _cell_center_world(r,c):
     cz = _grid_origin_z + grid_r * CELL_SIZE
     return (cx, cz)
 
-# -----------------------------
-# Raycast-based Collision Detection (Optimized for Performance)
-# -----------------------------
 def check_collision_raycast(from_pos, to_pos, check_height=1.0):
-    """Check if movement from from_pos to to_pos would collide with walls using raycasts.
-    Returns: (collided, safe_pos) - safe_pos is the furthest safe position along the path.
-    OPTIMIZED: Uses only 2-3 raycasts instead of 24 for 10x+ performance improvement.
-    """
+
     if not USE_RAYCAST_COLLISION:
         return False, to_pos
     
     fx, fy, fz = from_pos
     tx, ty, tz = to_pos
     
-    # Calculate movement vector
     dx = tx - fx
     dz = tz - fz
     move_dist = math.hypot(dx, dz)
@@ -254,17 +215,14 @@ def check_collision_raycast(from_pos, to_pos, check_height=1.0):
     if move_dist < 1e-6:
         return False, to_pos
     
-    # Normalize direction
     dir_x = dx / move_dist
     dir_z = dz / move_dist
     
     collided = False
     min_safe_fraction = 1.0
     
-    # Test at player center height (not too low to avoid floor, not too high)
-    test_y = fy + 0.8  # Fixed height above player base to avoid floor
-    
-    # Main forward ray (most important)
+    test_y = fy + 0.8
+
     ray_start = [fx, test_y, fz]
     ray_end = [tx, test_y, tz]
     
@@ -272,22 +230,18 @@ def check_collision_raycast(from_pos, to_pos, check_height=1.0):
         info = viz.intersect(ray_start, ray_end)
         if info.valid:
             hit_point = info.point
-            # Ignore hits that are below or above player (likely floor/ceiling)
             hit_height = hit_point[1]
-            if abs(hit_height - test_y) < 0.8:  # Increased tolerance to catch walls better
-                # Hit something at player level - calculate safe distance
+            if abs(hit_height - test_y) < 0.8:
                 hit_dist = math.hypot(hit_point[0] - fx, hit_point[2] - fz)
                 safe_dist = max(0, hit_dist - COLLISION_BUFFER)
                 safe_fraction = safe_dist / move_dist if move_dist > 0 else 0
                 min_safe_fraction = safe_fraction
                 collided = True
     except Exception as e:
-        # If raycast fails, allow movement (better than being stuck)
         pass
     
-    # Only add side rays if we have budget for it (reduces from 8 to 2)
     if COLLISION_RAYS > 1 and not collided and not COLLISION_SIMPLE_MODE:
-        # Just check left and right at ±30 degrees for corners
+
         for angle_offset in [-30.0, 30.0]:
             angle_rad = math.radians(angle_offset)
             cos_a = math.cos(angle_rad)
@@ -303,19 +257,17 @@ def check_collision_raycast(from_pos, to_pos, check_height=1.0):
                 if info.valid:
                     hit_point = info.point
                     hit_height = hit_point[1]
-                    # Only count hits at similar height (not floor/ceiling)
                     if abs(hit_height - test_y) < 0.8:
                         hit_dist = math.hypot(hit_point[0] - fx, hit_point[2] - fz)
                         safe_dist = max(0, hit_dist - COLLISION_BUFFER)
                         safe_fraction = safe_dist / move_dist if move_dist > 0 else 0
                         min_safe_fraction = min(min_safe_fraction, safe_fraction)
                         collided = True
-                        break  # Stop after first hit for speed
+                        break
             except:
                 pass
     
     if collided and min_safe_fraction < 1.0:
-        # Calculate safe position
         safe_x = fx + dir_x * (move_dist * min_safe_fraction)
         safe_z = fz + dir_z * (move_dist * min_safe_fraction)
         return True, [safe_x, ty, safe_z]
@@ -323,41 +275,30 @@ def check_collision_raycast(from_pos, to_pos, check_height=1.0):
     return collided, to_pos
 
 def slide_collision(from_pos, desired_pos, check_height=1.0):
-    """Try to move to desired_pos. If blocked, try sliding along the wall.
-    Returns: final_position after collision resolution.
-    OPTIMIZED: Only does extra raycasts if actually needed.
-    """
-    # First try direct movement (1 raycast)
+
     collided, safe_pos = check_collision_raycast(from_pos, desired_pos, check_height)
     
     if not collided:
         return desired_pos
-    
-    # Only if blocked, try sliding (adds 1-2 more raycasts)
+
     fx, fy, fz = from_pos
     dx, dy, dz = desired_pos
     
-    # Calculate how much we moved with safe_pos
     moved_dist = math.hypot(safe_pos[0] - fx, safe_pos[2] - fz)
     
-    # If we moved at least a little, use that
     if moved_dist > 0.01:
         return safe_pos
     
-    # If we barely moved, try sliding along axes
-    # Try X-only movement (1 raycast)
     x_only_pos = [dx, fy, fz]
     x_collided, x_safe = check_collision_raycast(from_pos, x_only_pos, check_height)
     if not x_collided:
         return x_only_pos
-    
-    # Try Z-only movement (1 raycast)
+
     z_only_pos = [fx, fy, dz]
     z_collided, z_safe = check_collision_raycast(from_pos, z_only_pos, check_height)
     if not z_collided:
         return z_only_pos
     
-    # Use whichever partial movement is better
     x_dist = abs(x_safe[0] - fx)
     z_dist = abs(z_safe[2] - fz)
     if x_dist > z_dist and x_dist > 0.005:
@@ -365,53 +306,38 @@ def slide_collision(from_pos, desired_pos, check_height=1.0):
     elif z_dist > 0.005:
         return z_safe
     
-    # Last resort: return safe_pos even if minimal movement
     return safe_pos
 
 def check_camera_collision(cam_pos, target_pos):
-    """Check if camera position would be inside a wall. Returns adjusted safe position."""
     if not CAMERA_COLLISION_ENABLED:
         return cam_pos
-    
-    # First ensure camera maintains minimum distance from player
     tx, ty, tz = target_pos
     cx, cy, cz = cam_pos
-    
-    # Calculate distance from player
     dist_to_player = math.sqrt((cx-tx)**2 + (cy-ty)**2 + (cz-tz)**2)
-    min_distance = 0  # Minimum camera distance from player
-    
+    min_distance = 0  
     if dist_to_player < min_distance:
-        # Push camera away to maintain minimum distance
         if dist_to_player > 0.01:
             scale = min_distance / dist_to_player
             cx = tx + (cx - tx) * scale
             cy = ty + (cy - ty) * scale
             cz = tz + (cz - tz) * scale
         else:
-            # Camera is exactly at player, push back
             cx = tx
             cy = ty + 1.0
             cz = tz - min_distance
         cam_pos = [cx, cy, cz]
     
     try:
-        # Cast ray from target (player) to camera position
         info = viz.intersect(target_pos, cam_pos)
         if info.valid:
-            # Hit wall between player and camera - pull camera forward
             hit_point = info.point
-            # Place camera slightly in front of the hit point
             hx, hy, hz = hit_point
-            
-            # Direction from target to hit
             dx = hx - tx
             dy = hy - ty
             dz = hz - tz
             dist = math.sqrt(dx*dx + dy*dy + dz*dz)
             
             if dist > 0.01:
-                # Normalize and pull back by buffer
                 dx /= dist
                 dy /= dist
                 dz /= dist
@@ -423,19 +349,15 @@ def check_camera_collision(cam_pos, target_pos):
     
     return cam_pos
 
-# Allow external launcher to inject Pac-Man AI by setting EXTERNAL_PACMAN_AI env var
 if not os.environ.get('EXTERNAL_PACMAN_AI'):
     pacman_ai = None
     def _spawn_pacman_ai():
         global pacman_ai
         if pacman_ai is None:
             try:
-                # Pass jump distance from Player config to Pac-Man AI
                 pacman_ai = PacManChaser(map_root=pacmap_root)
-                # Update jump distance if Pac-Man has animation
                 if hasattr(pacman_ai, 'node') and pacman_ai.node:
                     try:
-                        # Try to update jump distance on the animation node
                         if hasattr(pacman_ai.node, '_jump_forward'):
                             pacman_ai.node._jump_forward = PACMAN_JUMP_DISTANCE
                     except:
@@ -443,23 +365,15 @@ if not os.environ.get('EXTERNAL_PACMAN_AI'):
                 print('[PacMan] AI spawned after 3s delay (jump distance: %.1f)' % PACMAN_JUMP_DISTANCE)
             except Exception as e:
                 print('[PacMan] AI spawn failed:', e)
-    # 3 second delayed spawn
     vizact.ontimer(3.0, _spawn_pacman_ai)
 else:
-    pacman_ai = None  # external launcher will create and attach
+    pacman_ai = None  
 
-# -----------------------------
-# Input
-# -----------------------------
 keys = {'w':False,'a':False,'s':False,'d':False}
 def set_key(k,s): keys[k]=s
 for k in ['w','a','s','d']:
     vizact.onkeydown(k,lambda kk=k:set_key(kk,True))
     vizact.onkeyup(k,lambda kk=k:set_key(kk,False))
-
-# Bind vertical free cam keys
-# (Removed Q/E bindings used for free camera vertical movement)
-
 vizact.onkeydown(viz.KEY_ESCAPE, lambda: viz.quit())
 
 def toggle_mouse():
@@ -480,9 +394,6 @@ def toggle_perspective():
     player.visible(False if FIRST_PERSON else True)
 vizact.onkeydown('f', toggle_perspective)
 
-# (Removed free camera toggle and state)
-
-# Use KeyLoader's helper to point to the nearest key (keeps logic centralized)
 try:
     from KeyLoader import point_to_closest_key as _kl_point_to_closest_key
 except Exception:
@@ -514,11 +425,6 @@ def point_to_closest_key_handler():
 
 vizact.onkeydown('k', lambda: point_to_closest_key_handler())
 
-# (Removed collision disable toggle bound to 'V')
-
-# -----------------------------
-# Camera state + mouse callback (unified FP-like control for both FP & TP)
-# -----------------------------
 cam_yaw   = 0.0
 cam_pitch = 5.0
 last_cam_pos = None
@@ -538,11 +444,8 @@ def _on_mouse_move(e):
         delta_pitch = -delta_pitch
     cam_pitch += delta_pitch
     cam_pitch = clamp(cam_pitch, -PITCH_LIMIT, PITCH_LIMIT)
-    # If mouse is locked, re-center the OS cursor to the window center so
-    # subsequent mouse movement deltas continue coming from the center.
     try:
         if mouse_locked:
-            # Try window-size APIs in order of likelihood
             cx = cy = None
             try:
                 if hasattr(viz, 'window') and hasattr(viz.window, 'getSize'):
@@ -563,11 +466,9 @@ def _on_mouse_move(e):
 
             if cx is not None and cy is not None:
                 try:
-                    # viz.mouse.setPosition expects a 2-tuple/list [x,y]
                     if hasattr(viz.mouse, 'setPosition'):
                         viz.mouse.setPosition([cx, cy])
                     else:
-                        # some builds expose as viz.setMousePosition
                         if hasattr(viz, 'setMousePosition'):
                             viz.setMousePosition([cx, cy])
                 except Exception:
@@ -580,37 +481,29 @@ if hasattr(viz,'MOUSE_MOVE_EVENT'):
 else:
     print('[Mouse] viz.MOUSE_MOVE_EVENT not available; mouselook needs that event.')
 
-# -----------------------------
-# Camera update (TP uses same yaw/pitch "view" as FP, just offset back)
-# -----------------------------
 def update_camera(dt):
     global last_cam_pos
     yaw_rad   = math.radians(cam_yaw)
     pitch_rad = math.radians(cam_pitch)
 
-    # View direction from yaw/pitch (same for FP & TP)
     dir_x = math.sin(yaw_rad) * math.cos(pitch_rad)
     dir_y = math.sin(pitch_rad)
     dir_z = math.cos(yaw_rad) * math.cos(pitch_rad)
 
-    # Horizontal forward (ignore pitch) for movement/facing
     hfx = math.sin(yaw_rad)
     hfz = math.cos(yaw_rad)
 
     px,py,pz = player.getPosition()
     if FIRST_PERSON:
         target = [px, py + CAMERA_HEIGHT_FP, pz]
-        desired = target[:]  # camera at eye
+        desired = target[:]
         look_at = [target[0] + dir_x*3.0, target[1] + dir_y*3.0, target[2] + dir_z*3.0]
     else:
-        # FP-like control: same yaw/pitch direction; camera is just pulled back by fixed distance
         target = [px, py + CAMERA_HEIGHT_TP, pz]
         cam_x = target[0] - dir_x * CAMERA_DISTANCE_TP
         cam_y = target[1] - dir_y * CAMERA_DISTANCE_TP
         cam_z = target[2] - dir_z * CAMERA_DISTANCE_TP
-        cam_y = max(cam_y, CAMERA_MIN_HEIGHT_TP)  # keep slightly above floor
-
-        # Apply camera collision to prevent going through walls
+        cam_y = max(cam_y, CAMERA_MIN_HEIGHT_TP) 
         raw_cam_pos = [cam_x, cam_y, cam_z]
         desired = check_camera_collision(raw_cam_pos, target)
 
@@ -627,13 +520,8 @@ def update_camera(dt):
 
     viz.MainView.setPosition(cam_pos)
     viz.MainView.lookat(look_at)
-    return hfx,hfz  # horizontal forward for movement
-
-# -----------------------------
-# Frame update
-# -----------------------------
+    return hfx,hfz 
 def on_update():
-    # Check if game over has been triggered; lock controls and force FP
     try:
         import GameOver
         if GameOver.is_game_over():
@@ -646,12 +534,11 @@ def on_update():
                     player.visible(False)
                 except Exception:
                     pass
-            return  # Freeze updates when game ends
+            return  
     except Exception:
         pass
     
     dt = viz.getFrameElapsed()
-    # If controls are locked (escape/ending), force FP before camera update and freeze
     if CONTROLS_LOCKED or _END_LOCKED:
         try:
             if not FIRST_PERSON:
@@ -661,11 +548,8 @@ def on_update():
             pass
         update_camera(dt)
         return
-
-    # Always keep camera aligned when not locked
     hfx,hfz = update_camera(dt)
 
-    # Player movement (horizontal only)
     right_x = hfz
     right_z = -hfx
 
@@ -680,21 +564,17 @@ def on_update():
         vx /= l; vz /= l
         x,y,z = player.getPosition()
 
-        # Calculate desired new position
         desired_x = x + vx*PLAYER_SPEED*dt
         desired_z = z + vz*PLAYER_SPEED*dt
         desired_pos = [desired_x, y, desired_z]
 
         if USE_RAYCAST_COLLISION:
-            # Use raycast collision with sliding
             from_pos = [x, y, z]
             final_pos = slide_collision(from_pos, desired_pos, check_height=CAMERA_HEIGHT_FP)
-            # Only update if actually moved
             if abs(final_pos[0] - x) > 1e-6 or abs(final_pos[2] - z) > 1e-6:
                 player.setPosition(final_pos)
                 moved = True
         elif PLAYER_COLLISION_ENABLED:
-            # Grid-based collision attempt (legacy)
             nx = desired_x
             nz = desired_z
             rc_full = _world_to_grid(nx,nz)
@@ -702,22 +582,18 @@ def on_update():
                 player.setPosition([nx, y, nz])
                 moved = True
             else:
-                # try X only
                 rc_x = _world_to_grid(nx,z)
                 if rc_x is not None and _is_passable_rc(*rc_x):
                     player.setPosition([nx, y, z])
                     moved = True
-                # try Z only
                 rc_z = _world_to_grid(x,nz)
                 if rc_z is not None and _is_passable_rc(*rc_z):
                     player.setPosition([x, y, nz])
                     moved = True
         else:
-            # Free movement (no collisions)
             player.setPosition([desired_x, y, desired_z])
             moved = True
 
-        # Optional centering only when collisions are enabled
         if PLAYER_COLLISION_ENABLED:
             x_cur,y_cur,z_cur = player.getPosition()
             rc = _world_to_grid(x_cur,z_cur)
@@ -737,29 +613,20 @@ def on_update():
 
         global player_yaw, player_target_yaw, player_velocity
         if not FIRST_PERSON:
-            # Rotate player to face movement direction (only if moving)
-            # Rotation happens AFTER position update to prevent drift
             if moved and (mx != 0 or mz != 0):
-                # Calculate direction player is moving
                 movement_yaw = math.degrees(math.atan2(vx, vz))
                 player_yaw = movement_yaw
-                # Set rotation without affecting position
                 player.setEuler([player_yaw, 0, 0])
-
-    # Update Pac-Man chaser AI
-    # Update Pac-Man chaser AI
     try:
         px, py, pz = player.getPosition()
         pacman_ai.update(dt, (px, py, pz))
         if pacman_ai.collides_with_point((px, py, pz), radius=PLAYER_RADIUS):
             print('[PacMan] Collision: player caught!')
-            # Play death sound (defensive import)
             try:
                 import Ambience
                 Ambience.play_death_sound()
             except Exception:
                 pass
-            # Trigger game over sequence
             try:
                 import GameOver
                 GameOver.show_game_over_and_close()
@@ -770,9 +637,6 @@ def on_update():
 
 vizact.ontimer(0,on_update)
 
-# -----------------------------
-# Info
-# -----------------------------
 print('Controls:')
 print('  Move: W A S D')
 print('  Quit:    Esc')
