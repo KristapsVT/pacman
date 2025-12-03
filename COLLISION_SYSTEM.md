@@ -1,173 +1,94 @@
-# Collision System Documentation
+# Collision System
 
-## Overview
-The collision system uses **raycast-based collision detection** with **sliding collision response** to prevent glitching, screen shaking, and wall penetration in Vizard.
+The game uses raycast-based collision detection with sliding response to prevent glitching, jitter, and wall penetration in Vizard.
 
-## Key Features
+## Highlights
 
-### 1. **Raycast-Based Collision Detection**
-- Uses `viz.intersect()` to cast rays from the player position toward the desired movement direction
-- Checks multiple heights (feet, waist, head) for robust detection
-- Uses a **cone of rays** (8 rays by default) spread ±45° around the main direction for better corner detection
-- Maintains a `COLLISION_BUFFER` (0.3 units) to prevent penetration
+- Raycasts via `viz.intersect()` in a cone around movement.
+- Multiple heights (feet/waist/head) for robust hits.
+- Sliding response: try X-only and Z-only when blocked.
+- Third-person camera collision with pull-forward when obstructed.
 
-### 2. **Sliding Collision Response**
-- When direct movement is blocked, tries moving along X and Z axes separately
-- Allows smooth "sliding" along walls instead of stopping completely
-- Prevents the player from getting stuck in corners
-- Chooses the axis that allows the most movement
-
-### 3. **Camera Collision**
-- In third-person mode, prevents the camera from going through walls
-- Casts a ray from player to camera position
-- Pulls camera forward if it would be inside a wall
-- Maintains smooth camera positioning without jitter
-
-## Configuration Constants
+## Configuration
 
 ```python
 # Raycast collision settings
-USE_RAYCAST_COLLISION = True     # Enable raycast collision (recommended)
-COLLISION_BUFFER = 0.3           # Distance from walls (prevent penetration)
-COLLISION_RAYS = 8               # Number of rays for detection (more = smoother)
-CAMERA_COLLISION_ENABLED = True  # Prevent camera wall penetration
+USE_RAYCAST_COLLISION = True    # Enable raycast (recommended)
+COLLISION_BUFFER = 0.3          # Stand-off from walls (penetration guard)
+COLLISION_RAYS = 8              # Rays in the cone (accuracy/perf tradeoff)
+CAMERA_COLLISION_ENABLED = True # Prevent camera wall penetration
 
-# Legacy grid collision (can be disabled)
-PLAYER_COLLISION_ENABLED = False # Old grid-based collision
+# Legacy grid collision (disabled by default)
+PLAYER_COLLISION_ENABLED = False
 ```
 
 ## How It Works
 
-### Player Movement
-1. **Calculate desired position** based on input (WASD) and frame time
-2. **Cast rays** from current position to desired position
-3. **Detect collision** - if any ray hits geometry, calculate safe distance
-4. **Apply sliding** - if blocked, try X-only and Z-only movement separately
-5. **Move player** to the safest position that allows maximum movement
+1. Compute desired position from input and `dt`.
+2. Cast rays from current to desired position at three heights.
+3. If any ray hits, compute the safe position (buffered).
+4. If blocked, test X-only then Z-only movement (pick the best).
+5. Move to the final safe position.
 
-### Camera Collision (Third-Person)
-1. **Calculate camera position** based on player position and camera offset
-2. **Cast ray** from player to camera position
-3. **If ray hits wall**, place camera at hit point minus buffer distance
-4. **Apply smoothing** (optional) for smooth camera transitions
+### Camera (Third-Person)
 
-## Advantages Over Other Methods
+- Cast a ray from player to camera.
+- If it hits, place camera at the hit point minus buffer; apply smoothing.
 
-### vs. Grid-Based Collision
-- ✅ Works with any geometry (not limited to grid-aligned walls)
-- ✅ No screen shaking from discrete grid cells
-- ✅ Smooth sliding along diagonal walls
-- ✅ No "sticky corners" from grid quantization
+## Advantages
 
-### vs. Physics Engine Collision
-- ✅ Lightweight (no physics overhead)
-- ✅ Deterministic and predictable
-- ✅ No bouncing/jittering from physics simulation
-- ✅ Easy to tune (single buffer parameter)
-
-### vs. Bounding Box Collision
-- ✅ More accurate collision detection
-- ✅ Works with complex geometry
-- ✅ No penetration issues from small timesteps
-- ✅ Predictive (checks before moving)
+- Works with arbitrary geometry; no grid alignment required.
+- Predictive, deterministic, and lightweight (no physics).
+- Smooth sliding along diagonals; avoids sticky corners.
 
 ## Performance
 
-- **Raycast count per frame**: ~24 rays (8 directions × 3 heights) when moving
-- **CPU cost**: Very low (raycasts are hardware-accelerated in Vizard)
-- **No impact on physics engine** (pure geometric queries)
+- ~24 rays/frame while moving (8 rays × 3 heights).
+- Low CPU cost (Vizard raycasts are hardware-accelerated).
+- Pure geometric queries, no physics engine overhead.
 
-## Testing & Tuning
+## Tuning Cheatsheet
 
-### If player is too far from walls:
-- Decrease `COLLISION_BUFFER` (e.g., 0.2 or 0.15)
+- Player too far from walls: lower `COLLISION_BUFFER` (0.2–0.15).
+- Penetration occurs: raise `COLLISION_BUFFER` (0.4–0.5) or `COLLISION_RAYS` (12–16).
+- Movement sluggish near walls: lower `COLLISION_RAYS` (4–6) and/or raise `PLAYER_SPEED`.
+- Camera jitter: enable smoothing, raise damping, verify `CAMERA_COLLISION_ENABLED`.
 
-### If player still penetrates walls:
-- Increase `COLLISION_BUFFER` (e.g., 0.4 or 0.5)
-- Increase `COLLISION_RAYS` (e.g., 12 or 16)
+## API Surface
 
-### If movement feels sluggish near walls:
-- Decrease `COLLISION_RAYS` (e.g., 4 or 6)
-- Adjust `PLAYER_SPEED` for faster response
-
-### If camera jitters in tight spaces:
-- Enable `CAMERA_SMOOTH_TP = True`
-- Increase `CAMERA_DAMPING_TP` (e.g., 18.0 or 20.0)
-- Adjust `COLLISION_BUFFER` for camera
-
-## Code Structure
-
-### Main Functions
-
-1. **`check_collision_raycast(from_pos, to_pos, check_height)`**
-   - Returns: `(collided, safe_pos)`
-   - Casts multiple rays to detect walls
-   - Calculates safe position along movement path
-
-2. **`slide_collision(from_pos, desired_pos, check_height)`**
-   - Returns: `final_position`
-   - Tries direct movement first
-   - Falls back to X/Z-only movement if blocked
-   - Implements sliding behavior
-
-3. **`check_camera_collision(cam_pos, target_pos)`**
-   - Returns: `safe_cam_pos`
-   - Prevents camera from penetrating walls
-   - Pulls camera forward if needed
+- `check_collision_raycast(from_pos, to_pos, check_height) -> (collided, safe_pos)`
+- `slide_collision(from_pos, desired_pos, check_height) -> final_position`
+- `check_camera_collision(cam_pos, target_pos) -> safe_cam_pos`
 
 ## Usage in Update Loop
 
 ```python
-# In on_update() function:
+# In on_update():
 if mx or mz:
-    # Calculate movement
-    vx = right_x*mx + hfx*mz
-    vz = right_z*mx + hfz*mz
-    
-    # Get current position
-    x, y, z = player.getPosition()
-    
-    # Calculate desired position
-    desired_pos = [x + vx*PLAYER_SPEED*dt, y, z + vz*PLAYER_SPEED*dt]
-    
-    # Apply collision detection with sliding
-    final_pos = slide_collision([x,y,z], desired_pos, check_height=CAMERA_HEIGHT_FP)
-    
-    # Move player to safe position
-    player.setPosition(final_pos)
+   vx = right_x*mx + hfx*mz
+   vz = right_z*mx + hfz*mz
+
+   x, y, z = player.getPosition()
+   desired_pos = [x + vx*PLAYER_SPEED*dt, y, z + vz*PLAYER_SPEED*dt]
+
+   final_pos = slide_collision([x,y,z], desired_pos, check_height=CAMERA_HEIGHT_FP)
+   player.setPosition(final_pos)
 ```
 
 ## Troubleshooting
 
-### Problem: Player still goes through walls
-- Check that `USE_RAYCAST_COLLISION = True`
-- Verify wall geometry has collision enabled
-- Increase `COLLISION_BUFFER` and `COLLISION_RAYS`
-
-### Problem: Screen shaking/jittering
-- Make sure `CAMERA_SMOOTH_TP = True` in third-person
-- Increase `CAMERA_DAMPING_TP`
-- Check that `CAMERA_COLLISION_ENABLED = True`
-
-### Problem: Player gets stuck in corners
-- The sliding system should prevent this
-- If it happens, increase `COLLISION_BUFFER` slightly
-- Check that both X and Z sliding attempts are working
-
-### Problem: Camera pops through walls
-- Enable `CAMERA_COLLISION_ENABLED = True`
-- The ray from player to camera should prevent this
-- Increase buffer if still occurring
+- Goes through walls: ensure `USE_RAYCAST_COLLISION = True`; verify wall geometry collision; increase buffer/rays.
+- Screen jitter: enable camera smoothing; raise damping; confirm `CAMERA_COLLISION_ENABLED`.
+- Stuck in corners: increase `COLLISION_BUFFER`; verify both X/Z slides execute.
+- Camera clips: enable camera collision; increase buffer; check raycasts.
 
 ## Best Practices
 
-1. **Always use raycast collision** (`USE_RAYCAST_COLLISION = True`)
-2. **Keep COLLISION_BUFFER between 0.2-0.4** for best results
-3. **Use 6-8 rays** for good performance/accuracy balance
-4. **Enable camera collision** in third-person mode
-5. **Test in tight corridors** and corners to verify sliding works
-6. **Tune smoothing** for your desired camera feel
+- Keep `COLLISION_BUFFER` around 0.2–0.4.
+- Use 6–8 rays for a good accuracy/performance balance.
+- Enable camera collision in third-person.
+- Test in tight corridors and corners when tuning.
 
-## Legacy Systems
+## Legacy
 
-The old grid-based collision (`PLAYER_COLLISION_ENABLED`) is kept for backward compatibility but should remain disabled. The raycast system is superior in every way.
+The old grid-based collision (`PLAYER_COLLISION_ENABLED`) remains for backward compatibility but should stay disabled.
