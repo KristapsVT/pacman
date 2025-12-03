@@ -1,0 +1,8 @@
+# Ignore Python cache directories and compiled files
+horrorpackman/__pycache__/
+__pycache__/
+*.py[cod]
+*.pyc
+
+# Keep any previously-added unusual compiled files ignored
+Escape.cpython-38.pyc
