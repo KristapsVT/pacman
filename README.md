@@ -4,10 +4,10 @@ Vizard-based Pac‑Man with player movement, map loading, keys/locks, Pac‑Man 
 
 ## Quick Start
 - Prerequisite: Install WorldViz Vizard (provides the `viz`/`vizact` APIs).
-- Simplest way (Vizard app): Open `horrorpackman\PacMan_exe.py` in Vizard and press Run.
+- Simplest way (Vizard app): Open `horrorpacman\PacMan_exe.py` in Vizard and press Run.
 - From repo root (PowerShell) with Vizard's Python:
 	- Run full launcher (map + keys + locks + delayed Pac‑Man spawn):
-		- `Pacman/horrorpackman\PacMan_exe.py`
+		- `Pacman/horrorpacman\PacMan_exe.py`
 
 ## Controls
 - Move: `W/A/S/D`
@@ -16,20 +16,20 @@ Vizard-based Pac‑Man with player movement, map loading, keys/locks, Pac‑Man 
 - Toggle First/Third person: `F`
 
 ## Project Structure
-- `horrorpackman/Player.py`: Main runtime (camera, input, single update loop).
-- `horrorpackman/PacMan_exe.py`: Launcher (builds map, spawns keys/locks, schedules Pac‑Man).
-- `horrorpackman/MapLoader.py`: Loads floor/walls and caches map center/bounds.
-- `horrorpackman/KeyLoader.py`: Spawns keys from `Map_Grid.txt` (🟪 cells).
-- `horrorpackman/LockLoader.py` + `LockUnlocker.py`: Simple lock placement/unlock logic.
-- `horrorpackman/PacManAI.py`: Pac‑Man chaser logic and helpers.
-- `horrorpackman/PacManLoaderAndAnimations.py`: Pac‑Man model/animation loading.
-- `horrorpackman/KeyCollector.py`: Key pickup logic (init after player exists).
-- `horrorpackman/GameOver.py`: Shows game-over message + countdown, then closes.
-- `horrorpackman/Ambience.py`: Fog + background/death audio control.
+- `horrorpacman/Player.py`: Main runtime (camera, input, single update loop).
+- `horrorpacman/PacMan_exe.py`: Launcher (builds map, spawns keys/locks, schedules Pac‑Man).
+- `horrorpacman/MapLoader.py`: Loads floor/walls and caches map center/bounds.
+- `horrorpacman/KeyLoader.py`: Spawns keys from `Map_Grid.txt` (🟪 cells).
+- `horrorpacman/LockLoader.py` + `LockUnlocker.py`: Simple lock placement/unlock logic.
+- `horrorpacman/PacManAI.py`: Pac‑Man chaser logic and helpers.
+- `horrorpacman/PacManLoaderAndAnimations.py`: Pac‑Man model/animation loading.
+- `horrorpacman/KeyCollector.py`: Key pickup logic (init after player exists).
+- `horrorpacman/GameOver.py`: Shows game-over message + countdown, then closes.
+- `horrorpacman/Ambience.py`: Fog + background/death audio control.
 - `Map_Grid.txt`: Emoji grid that defines map layout and valid key cells.
 
 ## Ambience (Fog + Audio)
-- File: `horrorpackman/Ambience.py`.
+- File: `horrorpacman/Ambience.py`.
 - Fog settings:
 	- `FOG_ENABLED`: Enable/disable fog.
 	- `FOG_MODE`: `'LINEAR'` or `'EXPONENTIAL'`.
@@ -56,7 +56,7 @@ Vizard-based Pac‑Man with player movement, map loading, keys/locks, Pac‑Man 
 
 ## Troubleshooting
 - Missing `viz`/`vizact` errors: run inside a Vizard environment.
-- No ambient audio: ensure file exists under `horrorpackman/assets/`.
+- No ambient audio: ensure file exists under `horrorpacman/assets/`.
 - Fog issues: match `FOG_COLOR` to `viz.clearcolor` and tune `FOG_START/END` or switch to `'EXPONENTIAL'`.
 
 ## Notes
