@@ -6,15 +6,7 @@ Vizard-based Pac‑Man prototype with player movement, map loading, keys/locks, 
 
 - Prerequisite: Install WorldViz Vizard (provides the `viz`/`vizact` APIs).
 - Simplest way (Vizard app): Open `horrorpacman\PacMan_exe.py` in Vizard and press Run.
-- From repo root (PowerShell) with Vizard's Python:
-  - Change directory to repo root and run the launcher script.
-
-```powershell
-# Example: run via Vizard’s Python
-# Replace the path below with your Vizard Python if needed
-"C:\Program Files\WorldViz Vizard 7\bin\python.exe" .\horrorpacman\PacMan_exe.py
-```
-
+  
 ## Controls
 
 - Move: `W/A/S/D`
