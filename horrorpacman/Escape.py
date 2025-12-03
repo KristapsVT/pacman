@@ -426,7 +426,6 @@ def set_spawn_offset(offset):
 
 
 def _style_locked():
-    """Apply lightweight styling comparable to LockLoader._style_locks when escape is locked."""
     global _node
     if _node is None:
         return

@@ -4,7 +4,6 @@ import os
 import viz
 import vizact
 
-# Prefer importing the KeyLoader module so we can read its DEFAULT_CELL_SIZE
 try:
     import KeyLoader as _KL
     get_last_spawned_keys = getattr(_KL, 'get_last_spawned_keys', None)
@@ -37,7 +36,6 @@ def _load_pickup_sound():
         base = os.path.dirname(__file__)
         path = os.path.join(base, 'assets', 'key-get.mp3')
         if not os.path.exists(path):
-            # try alternate extensions just in case
             for alt in ('key-get.wav', 'key_get.mp3', 'key.mp3'):
                 p2 = os.path.join(base, 'assets', alt)
                 if os.path.exists(p2):
@@ -177,7 +175,6 @@ def _try_remove_node(node):
             if _KL is not None and hasattr(_KL, '_last_spawned'):
                 try:
                     lst = getattr(_KL, '_last_spawned')
-                    # remove all occurrences
                     while node in lst:
                         lst.remove(node)
                 except Exception:
