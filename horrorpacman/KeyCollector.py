@@ -1,12 +1,3 @@
-"""Key collection helper: allow the player to look at keys and click to pick them up.
-
-Usage: call `KeyCollector.init(player)` from `Player.py` after the `player` node
-is created (and after keys have been spawned). The module will create a small HUD
-showing collected keys and will remove key nodes when collected.
-
-This is intentionally self-contained and defensive: it tolerates missing Vizard
-APIs and missing KeyLoader state.
-"""
 import math
 import time
 import os
@@ -24,10 +15,9 @@ except Exception:
     _DEFAULT_CELL = 3.0
 
 
-# internal state
 _player = None
 _pick_distance = None
-_angle_threshold = None  # not used with grid-based pickup
+_angle_threshold = None 
 _hud = None
 _collected_count = 0
 _highlighted = None
@@ -36,14 +26,10 @@ _player_flash_until = 0.0
 _player_orig_color = None
 _on_collect_callback = None
 _collected_sequence = []
-_pickup_sound = None  # audio object for key pickup
+_pickup_sound = None 
 
 
 def _load_pickup_sound():
-    """Attempt to load the key pickup sound defensively.
-
-    Returns the audio object or None. Uses local assets folder; tolerates missing file.
-    """
     global _pickup_sound
     if _pickup_sound is not None:
         return _pickup_sound
@@ -61,7 +47,7 @@ def _load_pickup_sound():
             _pickup_sound = viz.addAudio(path)
         except Exception:
             try:
-                viz.playSound(path)  # fire-and-forget fallback
+                viz.playSound(path)
                 _pickup_sound = None
             except Exception:
                 _pickup_sound = None
@@ -72,29 +58,19 @@ def _load_pickup_sound():
 
 
 def _angle_diff(a):
-    """Normalize angle difference to [-180,180]"""
     a = (a + 180.0) % 360.0 - 180.0
     return a
 
 
 def _update_hud(message=None):
-    # HUD/text disabled per user request — no on-screen text will be shown.
     return
 
 
 def _show_popup(message, duration=1.8):
-    # popup disabled — no on-screen popup will be shown.
-    # Keep player flash as visual feedback (handled elsewhere).
     return
 
 
 def _find_nearby_key():
-    """Return the nearest key node that is on the same grid cell (proximity) as the player.
-
-    This function uses a proximity threshold derived from KeyLoader.DEFAULT_CELL_SIZE
-    to decide whether the player is "on the same grid" as a key.
-    Returns (node, distance) or (None, None).
-    """
     global _player, _pick_distance
     if _player is None or get_last_spawned_keys is None:
         return None, None
@@ -104,7 +80,6 @@ def _find_nearby_key():
     except Exception:
         return None, None
 
-    # Determine proximity threshold: default to KeyLoader cell size * 0.6
     if _pick_distance is None:
         try:
             _pick_distance = float(_DEFAULT_CELL) * 0.6
@@ -133,14 +108,12 @@ def _find_nearby_key():
 
 
 def _attempt_pick():
-    """Attempt to pick up a nearby key (keyboard- or code-triggerable)."""
     try:
         key, _ = _find_nearby_key()
     except Exception:
         return False
     if key is None:
         return False
-    # determine key color (try before removal since removal may destroy node)
     try:
         color_name = _get_key_color(key)
     except Exception:
@@ -154,7 +127,6 @@ def _attempt_pick():
             _collected_sequence.append(color_name)
         except Exception:
             pass
-        # play pickup sound (defensive)
         try:
             snd = _load_pickup_sound()
             if snd is not None:
@@ -164,14 +136,8 @@ def _attempt_pick():
         _flash_until = time.time() + 2.0
         _update_hud('Collected!')
         try:
-            _show_popup('Key Collected!')
-        except Exception:
-            pass
-        # trigger external callback if provided (e.g., PacMan_exe popup)
-        try:
             if _on_collect_callback is not None:
                 try:
-                    # send count, a textual message describing removal, and the collected sequence
                     msg = '[KeyCollector] removed node using %s' % (removed_by if removed_by is not None else 'unknown')
                     _on_collect_callback((_collected_count, msg, list(_collected_sequence)))
                 except Exception:
@@ -183,7 +149,6 @@ def _attempt_pick():
 
 
 def _try_remove_node(node):
-    """Try a few safe removal methods for a viz node."""
     try:
         node.remove()
         removed_by = 'node.remove()'
@@ -200,7 +165,6 @@ def _try_remove_node(node):
             ok = False
     if not ok:
         try:
-            # attempt to hide if can't remove
             node.visible(False)
             node.setParent(None)
             removed_by = 'hide()'
@@ -208,7 +172,6 @@ def _try_remove_node(node):
         except Exception:
             ok = False
 
-    # If we removed the node, also try to remove it from KeyLoader's cache
     if ok:
         try:
             if _KL is not None and hasattr(_KL, '_last_spawned'):
@@ -230,12 +193,7 @@ def _try_remove_node(node):
 
 
 def _get_key_color(node):
-    """Attempt to determine a key's color name (e.g. 'green','yellow','white').
-
-    This is defensive: try common methods/properties and fall back to 'unknown'.
-    """
     try:
-        # Try common APIs that return color tuples
         col = None
         if hasattr(node, 'getColor'):
             try:
@@ -249,19 +207,12 @@ def _get_key_color(node):
             except Exception:
                 col = None
 
-        # If we have an RGB(A) tuple/list, normalize and map to nearest of the
-        # three allowed colors: green(46b749), yellow(ffdd1a), white(dde2e4).
         if isinstance(col, (list, tuple)) and len(col) >= 3:
             try:
                 r, g, b = float(col[0]), float(col[1]), float(col[2])
-                # normalize if given in 0-255 range
                 if max(r, g, b) > 1.5:
                     r, g, b = r / 255.0, g / 255.0, b / 255.0
 
-                # Target colors (normalized from hex):
-                # green  46b749 -> (70,183,73)
-                # yellow ffdd1a -> (255,221,26)
-                # white  dde2e4 -> (221,226,228)
                 named = {
                     'green': (70.0/255.0, 183.0/255.0, 73.0/255.0),
                     'yellow': (255.0/255.0, 221.0/255.0, 26.0/255.0),
@@ -278,7 +229,6 @@ def _get_key_color(node):
             except Exception:
                 pass
 
-        # Look for textual hints in common attributes (map to the three allowed colors)
         for attr in ('name', '_name', 'key_color', 'color_name', 'type'):
             try:
                 v = getattr(node, attr, None)
@@ -296,18 +246,12 @@ def _get_key_color(node):
 
 
 def _update(dt=0):
-    """Run each frame: highlight key in view and handle click-to-pick."""
     global _highlighted, _collected_count, _flash_until
 
-    # find key near player (same grid cell)
     key, dist = _find_nearby_key()
 
-    # (no debug prints)
-
-    # update highlighting
     try:
         if _highlighted is not None and _highlighted is not key:
-            # restore scale
             try:
                 orig = getattr(_highlighted, '_kc_orig_scale', None)
                 if orig is not None:
@@ -318,7 +262,6 @@ def _update(dt=0):
 
         if key is not None and key is not _highlighted:
             try:
-                # store original scale and enlarge slightly
                 orig = key.getScale()
                 key._kc_orig_scale = list(orig) if orig else [1.0, 1.0, 1.0]
                 s = [orig[0] * 1.25, orig[1] * 1.25, orig[2] * 1.25]
@@ -329,15 +272,10 @@ def _update(dt=0):
     except Exception:
         pass
 
-    # (mouse click disabled — use keyboard 'E' to pick up)
-
-    # handle HUD flashing timeout
     if _flash_until and time.time() > _flash_until:
         _flash_until = 0.0
         _update_hud()
 
-    # popups disabled — no on-screen popup timeout handling
-    # restore player color if we flashed it
     try:
         global _player_flash_until, _player_orig_color
         if _player is not None and _player_flash_until and time.time() > _player_flash_until:
@@ -348,7 +286,6 @@ def _update(dt=0):
                     except Exception:
                         pass
                 else:
-                    # attempt to reset visibility/alpha by re-coloring to default
                     try:
                         _player.color(1.0, 1.0, 1.0)
                     except Exception:
@@ -362,14 +299,6 @@ def _update(dt=0):
 
 
 def init(player, pick_distance=4.0, angle_threshold=20.0, on_collect=None):
-    """Initialize the collector with the `player` node.
-
-    Call this from `Player.py` after `player` is created. Example:
-
-        import KeyCollector
-        KeyCollector.init(player)
-
-    """
     global _player, _pick_distance, _angle_threshold
     _player = player
     _pick_distance = float(pick_distance)
@@ -378,16 +307,12 @@ def init(player, pick_distance=4.0, angle_threshold=20.0, on_collect=None):
     _on_collect_callback = on_collect
     _update_hud()
     try:
-        # register update loop
         vizact.ontimer(0, _update)
     except Exception:
-        # fallback: try a slower timer
         try:
             vizact.ontimer(1/30.0, _update)
         except Exception:
             pass
-    # mouse callbacks removed — use keyboard ('E') to pick up keys
-    # Register keyboard pickup ('e') as a reliable fallback
     try:
         vizact.onkeydown('e', lambda: _attempt_pick())
     except Exception:
@@ -403,7 +328,6 @@ if __name__ == '__main__':
 
 
 def get_collected_sequence():
-    """Return a copy of the collected key color sequence (ordered oldest->newest)."""
     try:
         return list(_collected_sequence)
     except Exception:
@@ -411,7 +335,6 @@ def get_collected_sequence():
 
 
 def reset_collected():
-    """Clear collected count and sequence (useful for restarting a level)."""
     global _collected_count, _collected_sequence
     try:
         _collected_count = 0

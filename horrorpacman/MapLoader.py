@@ -2,11 +2,9 @@ import os
 import viz
 import vizshape
 
-# Pac-Man maze parts (floor + layered walls). Update filenames to match your assets.
-# These are relative to the existing `assets` directory.
 PACMAP_PARTS = {
-	'floor': 'PacMan_Floor.glb',      # floor mesh
-	'walls': [                        # layered slices (cake segments)
+	'floor': 'PacMan_Floor.glb',
+	'walls': [
 		'PacMan_Wall_1.glb',
 		'PacMan_Wall_2.glb',
 		'PacMan_Wall_3.glb',
@@ -68,17 +66,8 @@ def _style_pacmap(floor, walls):
 			pass
 
 def load_pacmap(parent=None, apply_style=True):
-	"""Load the pacman maze parts (floor + layered walls).
-
-	Returns (group, floor_node, wall_nodes_list)
-	- parent: optional existing group to attach to.
-	- apply_style: whether to recolor using _style_pacmap.
-
-	Update PACMAP_PARTS at top if filenames differ.
-	"""
 	group = viz.addGroup() if parent is None else parent
 	try:
-		# Some Vizard versions expose different group APIs; guard against missing method
 		group.name(MAP_GROUP_NAME)
 	except Exception:
 		try:
@@ -106,8 +95,6 @@ def load_pacmap(parent=None, apply_style=True):
 	if apply_style:
 		_style_pacmap(floor_node, wall_nodes)
 
-	# Compute and cache approximate world-space bounding rectangle for the pacmap
-	# so other modules (e.g. KeyLoader) can align content to the pacmap center.
 	minX = float('inf'); minZ = float('inf'); maxX = float('-inf'); maxZ = float('-inf')
 	any_geom = False
 	for n in ([floor_node] + wall_nodes):
@@ -117,7 +104,6 @@ def load_pacmap(parent=None, apply_style=True):
 			bb = n.getBoundingBox()
 			if bb:
 				raw_minX, raw_minY, raw_minZ, raw_maxX, raw_maxY, raw_maxZ = bb
-				# normalize in case the bounding box returned swapped values
 				cminX = min(raw_minX, raw_maxX)
 				cmaxX = max(raw_minX, raw_maxX)
 				cminZ = min(raw_minZ, raw_maxZ)
@@ -140,7 +126,6 @@ def load_pacmap(parent=None, apply_style=True):
 		group._pacmap_center = ((minX + maxX) / 2.0, (minZ + maxZ) / 2.0)
 		print('[Map] Cached pacmap bounds:', group._pacmap_bounds, 'center=', group._pacmap_center)
 
-	# Tag parts on group for downstream modules (colliders, etc.)
 	try:
 		group._pacmap_floor = floor_node
 	except Exception:
@@ -152,12 +137,7 @@ def load_pacmap(parent=None, apply_style=True):
 
 	return group, floor_node, wall_nodes
 
-# Optional quick build helper used by main script (import and call early):
 def build_and_attach_map():
 	g, f, walls = load_pacmap(apply_style=True)
 	print('[Map] Build complete. Parts:', 'floor=ok' if f else 'floor=missing', 'walls', len(walls))
 	return g
-
-# Usage in Player.py after arena floor/border creation:
-# from MapLoader import build_and_attach_map
-# pacmap_root = build_and_attach_map()

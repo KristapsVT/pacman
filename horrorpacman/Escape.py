@@ -265,16 +265,11 @@ def spawn_escape(map_root=None, attach_to_map=True, grid_path=None, cell_size=3.
 
 
 def init(player, map_root=None, cell_size=3.0, restart_callback=None):
-    """Initialize Escape logic: spawn escape and register input/update handlers.
-
-    `restart_callback` should reset the game (e.g., `game.restart`).
-    """
     global _player, _restart_cb
     _player = player
     _restart_cb = restart_callback
     spawn_escape(map_root=map_root, attach_to_map=True, cell_size=cell_size)
 
-    # register 'L' to attempt activation when unlocked
     try:
         vizact.onkeydown('l', lambda: _try_activate())
     except Exception:
@@ -298,15 +293,12 @@ def _try_activate():
         return False
     try:
         px, py, pz = _player.getPosition()
-        # Use logical activation position (mid) for player proximity checks so
-        # activation is independent of any visual spawn offset applied to the node.
         if _activation_pos is not None:
             ex, ey, ez = _activation_pos
         else:
             ex, ey, ez = _node.getPosition()
     except Exception:
         return False
-    # horizontal proximity threshold: 0.6 * cell
     try:
         thresh = (_cell_size * 0.6)
     except Exception:
@@ -314,10 +306,7 @@ def _try_activate():
     dx = px - ex
     dz = pz - ez
     if (dx*dx + dz*dz) <= (thresh * thresh):
-        # Instead of restarting, teleport the player to fixed coordinates (0, -150, 0)
-        # and spawn `Game_Over.glb` at (20, -150, 0). Also orient player to +X (yaw=90)
         try:
-            # Teleport player to (x=0, y=-150, z=0)
             try:
                 _player.setPosition((0.0, -150.0, 0.0))
             except Exception:
@@ -326,7 +315,6 @@ def _try_activate():
                 except Exception:
                     pass
 
-            # Spawn Game_Over model at (25, -148, 4)
             try:
                 game_node = _load_escape_model('Game_Over.glb', scale_factor=1.0, tint=None, fallback_color=(0.0,0.0,0.0), desired_bottom=0.0, desired_size=_cell_size * 0.9)
                 if game_node is not None:
@@ -348,7 +336,6 @@ def _try_activate():
             except Exception:
                 pass
 
-            # Orient player to face +X (yaw = 90 degrees) and lock controls
             try:
                 try:
                     import Player as _P
@@ -370,7 +357,6 @@ def _try_activate():
                 try:
                     import Player as _P2
                     try:
-                        # lock controls and ensure camera pitch is horizontal
                         _P2.CONTROLS_LOCKED = True
                     except Exception:
                         pass
@@ -390,12 +376,8 @@ def _try_activate():
 
 
 def on_unlock(color, node):
-    """Callback invoked when a lock is unlocked/removed. Decrement remaining count and
-    trigger unlocked state when zero.
-    """
     global _locks_remaining, _unlocked
     try:
-        # robustly recompute remaining locks
         _locks_remaining = _count_locks(_map_root)
     except Exception:
         try:
@@ -405,10 +387,8 @@ def on_unlock(color, node):
             _locks_remaining = None
 
     if _locks_remaining == 0:
-        # transition to unlocked state; sinking and black override will be applied once
         _unlocked = True
         try:
-            # reset one-shot flags so the update loop applies them once
             global _sank, _black_override_applied
             _sank = False
             _black_override_applied = False
@@ -417,10 +397,6 @@ def on_unlock(color, node):
 
 
 def set_spawn_offset(offset):
-    """Set spawn offset (ox,oy,oz). If escape node exists, move it by the delta.
-
-    `offset` can be a tuple/list of three numbers or a string-parsable floats.
-    """
     global _spawn_offset, _node
     try:
         ox, oy, oz = float(offset[0]), float(offset[1]), float(offset[2])
@@ -430,7 +406,6 @@ def set_spawn_offset(offset):
             ox, oy, oz = float(parts[0]), float(parts[1]), float(parts[2])
         except Exception:
             return False
-    # compute delta
     try:
         prev = _spawn_offset
         dx, dy, dz = (ox - prev[0], oy - prev[1], oz - prev[2])
@@ -460,7 +435,6 @@ def _style_locked():
     except Exception:
         pass
     try:
-        # choose a neutral color
         _node.color(0.9, 0.9, 0.9)
     except Exception:
         pass
@@ -471,7 +445,6 @@ def _style_unlocked():
     if _node is None:
         return
     try:
-        # try with alpha if supported
         try:
             _node.color(0.0, 0.0, 0.0, 1.0)
         except Exception:
@@ -480,13 +453,11 @@ def _style_unlocked():
             except Exception:
                 pass
 
-        # also attempt to override child visuals: remove textures and force color
         try:
             stack = [_node]
             while stack:
                 cur = stack.pop()
                 try:
-                    # disable lighting and force black
                     try:
                         cur.disable(viz.LIGHTING)
                     except Exception:
@@ -495,7 +466,6 @@ def _style_unlocked():
                         cur.color(0.0, 0.0, 0.0)
                     except Exception:
                         pass
-                    # try to clear a texture if present
                     if hasattr(cur, 'texture'):
                         try:
                             cur.texture(None)
@@ -521,7 +491,6 @@ def _style_unlocked():
 
 
 def _try_remove_node(node):
-    """Attempt safe removal of a viz node (mirrors KeyCollector/LockUnlocker)."""
     try:
         node.remove()
         return True
@@ -545,14 +514,10 @@ def _try_remove_node(node):
 
 
 def _replace_with_unlocked_model():
-    """Replace the current visual `_node` with `Escape_Unlocked.glb` at the same visual position.
-
-    Returns True on success (or partial success)."""
     global _node
     if _node is None:
         return False
     try:
-        # Capture visual transform and parent
         try:
             parent = _node.getParent()
         except Exception:
@@ -570,20 +535,16 @@ def _replace_with_unlocked_model():
         except Exception:
             scale = None
 
-        # remove old node safely
         _try_remove_node(_node)
 
-        # load the unlocked model (will center itself). Use same desired_size as original
         new_node = _load_escape_model('Escape_Unlocked.glb', scale_factor=1.0, tint=None, fallback_color=(0.0,0.0,0.0), desired_bottom=0.0, desired_size=_cell_size * 0.9)
         if new_node is None:
             return False
 
-        # Attach to same parent if possible
         try:
             if parent is not None:
                 new_node.setParent(parent)
             else:
-                # fallback: attach to map_root if available, else a fresh group
                 if _map_root is not None:
                     new_node.setParent(_map_root)
                 else:
@@ -591,12 +552,10 @@ def _replace_with_unlocked_model():
         except Exception:
             pass
 
-        # place at same visual position (apply spawn_offset relative to activation mid if original used it)
         try:
             if pos is not None:
                 new_node.setPosition(pos)
             else:
-                # fallback: use activation pos + spawn offset
                 if _activation_pos is not None:
                     ox, oy, oz = _spawn_offset
                     new_node.setPosition((_activation_pos[0] + ox, _activation_pos[1] + oy, _activation_pos[2] + oz))
@@ -626,23 +585,19 @@ def _replace_with_unlocked_model():
 
 
 def _update():
-    """Per-frame update: when unlocked, make black and sink; otherwise keep styled."""
     global _unlocked, _node
     if _node is None:
         return
     try:
         if _unlocked:
-            # Apply one-time black override and single downward shift
             global _sank, _black_override_applied
             if not _black_override_applied:
-                # Prefer replacing the visual with a pre-made all-black GLB if available.
                 replaced = False
                 try:
                     replaced = _replace_with_unlocked_model()
                 except Exception:
                     replaced = False
                 if not replaced:
-                    # fallback to best-effort styling
                     try:
                         _style_unlocked()
                     except Exception:
@@ -656,7 +611,6 @@ def _update():
                 except Exception:
                     pass
                 _sank = True
-            # once sank and colored, do not change further
         else:
             _style_locked()
     except Exception:

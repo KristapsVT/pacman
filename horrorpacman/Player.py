@@ -35,7 +35,7 @@ CAMERA_COLLISION_ENABLED = True  # prevent camera from going through walls
 COLLISION_SIMPLE_MODE = False  # True = only 1 ray (ultra fast), False = 2-3 rays
 
 FIRST_PERSON        = True
-CAMERA_DISTANCE_TP  = 6.5  # Increased from 5.5 to keep camera further back
+CAMERA_DISTANCE_TP  = 4.5  # Increased from 5.5 to keep camera further back
 CAMERA_HEIGHT_FP    = 1.3
 CAMERA_HEIGHT_TP    = 1.6
 CAMERA_MIN_HEIGHT_TP= 0.8  # Increased minimum to prevent camera from going too low
