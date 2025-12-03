@@ -3,16 +3,3 @@ horrorpackman/__pycache__/
 __pycache__/
 *.py[cod]
 *.pyc
-
-.github\copilot-instructions.md
-
-# Remove tracked cache files from the index but keep them locally
-git rm -r --cached horrorpackman/__pycache__
-git rm --cached Escape.cpython-38.pyc
-
-# Or to remove all now-ignored files from the index:
-git rm -r --cached .
-
-# Commit the .gitignore and the index cleanup
-git add .gitignore
-git commit -m "Ignore __pycache__ and compiled python files; stop tracking cached files"
