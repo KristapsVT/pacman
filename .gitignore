@@ -1,5 +1,5 @@
 # Ignore Python cache directories and compiled files
-horrorpackman/__pycache__/
+horrorpacman/__pycache__/
 __pycache__/
 *.py[cod]
 *.pyc
