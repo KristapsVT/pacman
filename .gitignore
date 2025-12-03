@@ -4,8 +4,7 @@ __pycache__/
 *.py[cod]
 *.pyc
 
-
-
+.github\copilot-instructions.md
 
 # Remove tracked cache files from the index but keep them locally
 git rm -r --cached horrorpackman/__pycache__
