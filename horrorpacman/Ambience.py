@@ -1,12 +1,7 @@
-"""
-Ambience module: handles fog effects and ambient sound for atmospheric game experience.
-Call init() after viz.go() to enable fog and sound.
-"""
 import viz
 import vizact
 import os
 
-# Resolve asset paths relative to this module so running from repo root works
 BASE_DIR = os.path.dirname(__file__)
 ASSETS_DIR = os.path.join(BASE_DIR, 'assets')
 def _asset_path(name):
@@ -15,75 +10,50 @@ def _asset_path(name):
     except Exception:
         return name
 
-# -----------------------------
-# Fog Configuration
-# -----------------------------
-FOG_ENABLED         = True      # Enable/disable fog effect
-FOG_START           = 6.0       # Distance where fog starts (units) - clear near player
-FOG_END             = 35.0      # Distance where fog is fully opaque (units) - covers far map
-FOG_DENSITY         = 0.15      # Fog density (0.0-1.0, only used for exponential fog)
-FOG_COLOR           = [0.0, 0.0, 0.0]  # Fog color - must match viz.clearcolor exactly
-FOG_MODE            = 'LINEAR'  # 'LINEAR' or 'EXPONENTIAL' - exponential may avoid floor issues
+FOG_ENABLED         = True      
+FOG_START           = 6.0      
+FOG_END             = 35.0      
+FOG_DENSITY         = 0.15      
+FOG_COLOR           = [0.0, 0.0, 0.0]  
+FOG_MODE            = 'LINEAR' 
 
-# -----------------------------
-# Sound Configuration
-# -----------------------------
-SOUND_ENABLED       = True      # Enable/disable ambient sound
-AMBIENT_SOUND_FILE  = _asset_path('horror-bg.mp3')  # Absolute path to ambient sound
-DEATH_SOUND_FILE    = _asset_path('crunch.mp3')     # Death/caught sound
-KEY_PICKUP_SOUND_FILE = _asset_path('key-get.mp3')   # Key pickup sound
-LOCK_UNLOCK_SOUND_FILE = _asset_path('lock-unlock.mp3')   # Lock/unlock sound
-AMBIENT_VOLUME      = 0.15      # Volume (0.0-1.0)
-AMBIENT_LOOP        = True      # Loop the ambient sound
-AMBIENT_PITCH       = 1.0       # Pitch multiplier (1.0 = normal)
+SOUND_ENABLED       = True      
+AMBIENT_SOUND_FILE  = _asset_path('horror-bg.mp3')  
+DEATH_SOUND_FILE    = _asset_path('crunch.mp3')     
+KEY_PICKUP_SOUND_FILE = _asset_path('key-get.mp3')   
+LOCK_UNLOCK_SOUND_FILE = _asset_path('lock-unlock.mp3')   
+AMBIENT_VOLUME      = 0.15      
+AMBIENT_LOOP        = True      
+AMBIENT_PITCH       = 1.0       
 DEATH_VOLUME        = 0.5
 
-# -----------------------------
-# Internal state
-# -----------------------------
 _ambient_sound = None
 _death_sound = None
 _fog_active = False
 _sound_active = False
 
-
 def init():
-    """
-    Initialize fog and sound effects.
-    Call this after viz.go() has been called.
-    """
     global _fog_active, _sound_active
     
-    # Setup fog
     if FOG_ENABLED:
         _fog_active = setup_fog()
     else:
         print('[Ambience] Fog disabled')
     
-    # Setup sound
     if SOUND_ENABLED:
         _sound_active = setup_sound()
     else:
         print('[Ambience] Sound disabled')
 
-
 def setup_fog():
-    """
-    Configure and enable fog effects using viz.MainScene.
-    Returns True if successful, False otherwise.
-    """
     try:
-        # Set fog color using viz.MainScene.fogColor
         viz.MainScene.fogColor(FOG_COLOR)
         print(f'[Ambience] Setting fog color: {FOG_COLOR}')
-        
-        # Enable fog with proper Vizard API
+
         if FOG_MODE == 'LINEAR':
-            # Linear fog: viz.MainScene.fog(start, end)
             viz.MainScene.fog(FOG_START, FOG_END)
             print(f'[Ambience] Fog enabled: LINEAR mode, start={FOG_START}m, end={FOG_END}m')
         else:
-            # Exponential fog: viz.MainScene.fog(density)
             viz.MainScene.fog(FOG_DENSITY)
             print(f'[Ambience] Fog enabled: EXPONENTIAL mode, density={FOG_DENSITY}')
         
@@ -94,16 +64,10 @@ def setup_fog():
         traceback.print_exc()
         return False
 
-
 def setup_sound():
-    """
-    Load and start ambient sound effects.
-    Returns True if successful, False otherwise.
-    """
     global _ambient_sound, _footstep_sound, _death_sound
     
     try:
-        # Load ambient background sound (absolute path)
         try:
             exists = os.path.exists(AMBIENT_SOUND_FILE)
             if not exists:
@@ -117,7 +81,7 @@ def setup_sound():
             print(f'[Ambience] Ambient sound loaded and playing: {AMBIENT_SOUND_FILE}')
         except Exception as e:
             print(f'[Ambience] Could not load ambient sound via addAudio ({AMBIENT_SOUND_FILE}): {e}')
-            # Fallback: try alternative filenames and viz.playSound
+
             alt_candidates = [
                 _asset_path('horror-bg.wav'),
                 _asset_path('ambient.wav'),
@@ -140,7 +104,7 @@ def setup_sound():
                     continue
             if not started:
                 try:
-                    # Last resort: immediate play using viz.playSound
+
                     viz.playSound(AMBIENT_SOUND_FILE, viz.LOOP)
                     print(f'[Ambience] Ambient started with viz.playSound loop: {AMBIENT_SOUND_FILE}')
                     started = True
@@ -148,8 +112,7 @@ def setup_sound():
                     print(f'[Ambience] viz.playSound failed: {e2}')
             if not started:
                 print('[Ambience] No ambient audio could be started. Check assets folder.')
-        
-        # Load death sound (for game over)
+
         try:
             _death_sound = viz.addAudio(DEATH_SOUND_FILE)
             _death_sound.volume(DEATH_VOLUME)
@@ -164,33 +127,23 @@ def setup_sound():
         traceback.print_exc()
         return False
 
-
 def disable_fog():
-    """Disable fog effects."""
+ 
     global _fog_active
     try:
-        viz.MainScene.fog(1000.0, 2000.0)  # Push fog far away
+        viz.MainScene.fog(1000.0, 2000.0)  
         _fog_active = False
         print('[Ambience] Fog disabled')
     except Exception as e:
         print(f'[Ambience] Failed to disable fog: {e}')
 
-
 def enable_fog():
-    """Re-enable fog with current settings."""
+
     global _fog_active
     if setup_fog():
         _fog_active = True
 
-
 def set_fog_distance(start, end):
-    """
-    Update fog start and end distances (for linear fog).
-    
-    Args:
-        start: Distance where fog begins
-        end: Distance where fog is fully opaque
-    """
     global FOG_START, FOG_END
     FOG_START = start
     FOG_END = end
@@ -202,14 +155,8 @@ def set_fog_distance(start, end):
         except Exception as e:
             print(f'[Ambience] Failed to update fog distance: {e}')
 
-
 def set_fog_density(density):
-    """
-    Update fog density (for exponential fog).
-    
-    Args:
-        density: Fog density value (0.0-1.0)
-    """
+
     global FOG_DENSITY
     FOG_DENSITY = density
     
@@ -222,10 +169,8 @@ def set_fog_density(density):
 
 
 def play_death_sound():
-    """Play death/caught sound effect."""
     global _death_sound
     try:
-        # Lazy-load if not yet initialized (in case init() wasn't called before death)
         if _death_sound is None:
             if os.path.exists(DEATH_SOUND_FILE):
                 try:
@@ -236,7 +181,6 @@ def play_death_sound():
         if _death_sound is not None:
             _death_sound.play()
         else:
-            # Fallback: fire-and-forget
             try:
                 viz.playSound(DEATH_SOUND_FILE)
             except Exception:
@@ -244,9 +188,7 @@ def play_death_sound():
     except Exception:
         pass
 
-
 def stop_ambient_sound():
-    """Stop the ambient background sound."""
     if _ambient_sound is not None:
         try:
             _ambient_sound.stop()
@@ -254,14 +196,8 @@ def stop_ambient_sound():
         except Exception:
             pass
 
-
 def set_ambient_volume(volume):
-    """
-    Change ambient sound volume.
-    
-    Args:
-        volume: Volume level (0.0-1.0)
-    """
+
     global AMBIENT_VOLUME
     AMBIENT_VOLUME = volume
     
@@ -272,39 +208,20 @@ def set_ambient_volume(volume):
         except Exception:
             pass
 
-
 def is_fog_active():
-    """Check if fog is currently active."""
     return _fog_active
 
-
 def is_sound_active():
-    """Check if sound is currently active."""
     return _sound_active
 
-
 def disable_fog_on_node(node):
-    """
-    Disable fog effect on a specific node (like the floor).
-    Call this after init() to exclude specific objects from fog.
-    
-    Args:
-        node: The viz node to disable fog on
-    """
     try:
         node.disable(viz.FOG)
         print(f'[Ambience] Fog disabled on node: {node}')
     except Exception as e:
         print(f'[Ambience] Failed to disable fog on node: {e}')
 
-
 def enable_fog_on_node(node):
-    """
-    Re-enable fog effect on a specific node.
-    
-    Args:
-        node: The viz node to enable fog on
-    """
     try:
         node.enable(viz.FOG)
         print(f'[Ambience] Fog enabled on node: {node}')
